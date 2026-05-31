@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rewind-core",
+    "crates/rewind-cli",
+]
+# rewind-py is a PyO3 extension built by maturin (needs a Python interpreter at
+# build time); excluded so core `cargo build`/`cargo test` stay Python-free.
+exclude = ["crates/rewind-py"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+repository = "https://github.com/rewind-dev/rewind"
+authors = ["Rewind contributors"]
+
+[workspace.dependencies]
+blake3 = "1.5"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+ciborium = "0.2"          # CBOR (deterministic-encoding'e yakın; dCBOR kanonikleştirme TODO)
+serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
+thiserror = "1"
+anyhow = "1"
+hex = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"

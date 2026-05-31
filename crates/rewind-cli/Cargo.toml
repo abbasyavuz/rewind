@@ -1,0 +1,19 @@
+[package]
+name = "rewind-cli"
+description = "Rewind CLI — offline `.rewind` artifact verifier and inspector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "rewind"
+path = "src/main.rs"
+
+[dependencies]
+rewind-core = { path = "../rewind-core" }
+clap.workspace = true
+anyhow.workspace = true
+hex.workspace = true

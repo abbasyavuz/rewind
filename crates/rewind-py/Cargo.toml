@@ -1,0 +1,16 @@
+[package]
+name = "rewind-py"
+description = "PyO3 bindings: the .rewind artifact engine for the Python capture SDK"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+
+[lib]
+name = "rewind_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+rewind-core = { path = "../rewind-core" }
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py310"] }
+hex = "0.4"

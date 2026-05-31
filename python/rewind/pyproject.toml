@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rewind"
+version = "0.0.1"
+description = "Rewind capture SDK — below-framework recording of an AI agent's non-deterministic boundaries"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Rewind contributors" }]
+dependencies = [
+    "httpx>=0.27",   # the v0 capture chokepoint (OpenAI/Anthropic SDK transport)
+    "blake3>=0.4",   # CID + keyed-HMAC; MUST match rewind-core's BLAKE3
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+# redaction backend (optional, heavy); v0 ships a regex fallback in commitment.py
+pii = ["presidio-analyzer>=2.2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rewind"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+strict = true

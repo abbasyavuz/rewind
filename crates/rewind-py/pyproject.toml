@@ -1,0 +1,15 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "rewind-native"
+version = "0.0.1"
+description = "PyO3-backed .rewind artifact engine (signing, chaining, offline verify) for the rewind capture SDK"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+classifiers = ["Programming Language :: Rust"]
+
+[tool.maturin]
+module-name = "rewind_native"
+features = ["pyo3/extension-module"]

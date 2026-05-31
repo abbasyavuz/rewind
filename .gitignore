@@ -1,0 +1,31 @@
+# Rust
+/target
+**/target
+# Cargo.lock IS committed: this workspace ships a binary (rewind-cli).
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Rewind artifacts (don't commit captured runs)
+*.rewind/
+*.rewind
+
+# Keys (NEVER commit signing keys)
+*.ed25519
+*.key
+/keys/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
