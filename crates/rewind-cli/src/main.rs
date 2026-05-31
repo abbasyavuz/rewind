@@ -12,6 +12,8 @@ use rewind_core::{
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+mod debug;
+
 #[derive(Parser)]
 #[command(
     name = "rewind",
@@ -36,6 +38,9 @@ enum Cmd {
     /// Print a human summary of a .rewind artifact.
     Inspect {
         path: PathBuf,
+        /// Emit the integrity report as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Generate an Ed25519 keypair: writes <out> (secret) and <out>.pub (public).
     Keygen {
@@ -46,14 +51,74 @@ enum Cmd {
         /// Output directory for the artifact.
         path: PathBuf,
     },
+    /// Time-travel timeline: one row per captured boundary (pipe to `less -R`).
+    Log {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        oneline: bool,
+        #[arg(long)]
+        kind: Option<String>,
+        #[arg(long)]
+        surface: Option<String>,
+        #[arg(long)]
+        from: Option<u64>,
+        #[arg(long)]
+        to: Option<u64>,
+        #[arg(short = 'n')]
+        limit: Option<usize>,
+    },
+    /// Show one boundary's full request + response (by seq or causal-id prefix).
+    Show {
+        path: PathBuf,
+        /// A boundary seq (integer) or a (short) causal_boundary_id.
+        selector: String,
+        #[arg(long)]
+        request: bool,
+        #[arg(long)]
+        response: bool,
+        #[arg(long)]
+        raw: bool,
+        #[arg(long)]
+        meta: bool,
+    },
+    /// Diff two trajectories (e.g. original vs forked): prefix · divergence · frontier.
+    Diff {
+        a: PathBuf,
+        b: PathBuf,
+        /// Only print the --stat header.
+        #[arg(long)]
+        stat: bool,
+        /// Drill into a single boundary's response diff.
+        #[arg(long)]
+        boundary: Option<u64>,
+        /// Verify both artifacts before diffing; refuse if either fails.
+        #[arg(long)]
+        verify: bool,
+        #[arg(long)]
+        pubkey_a: Option<PathBuf>,
+        #[arg(long)]
+        pubkey_b: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Verify { path, pubkey } => cmd_verify(path, pubkey),
-        Cmd::Inspect { path } => cmd_inspect(path),
+        Cmd::Inspect { path, json } => cmd_inspect(path, json),
         Cmd::Keygen { out } => cmd_keygen(out),
         Cmd::Demo { path } => cmd_demo(path),
+        Cmd::Log { path, json, oneline, kind, surface, from, to, limit } => {
+            debug::cmd_log(&path, json, oneline, kind, surface, from, to, limit)
+        }
+        Cmd::Show { path, selector, request, response, raw, meta } => {
+            debug::cmd_show(&path, &selector, request, response, raw, meta)
+        }
+        Cmd::Diff { a, b, stat, boundary, verify, pubkey_a, pubkey_b } => {
+            let code = debug::cmd_diff(&a, &b, stat, boundary, verify, pubkey_a.as_deref(), pubkey_b.as_deref())?;
+            std::process::exit(code);
+        }
     }
 }
 
@@ -90,9 +155,22 @@ fn cmd_verify(path: PathBuf, pubkey: Option<PathBuf>) -> Result<()> {
     }
 }
 
-fn cmd_inspect(path: PathBuf) -> Result<()> {
+fn cmd_inspect(path: PathBuf, json: bool) -> Result<()> {
     // Reuse the verifier in integrity-only mode for the summary.
     let report = verify_artifact(&path, None).context("reading artifact")?;
+    if json {
+        let v = serde_json::json!({
+            "run_id": report.run_id,
+            "event_count": report.event_count,
+            "chain_ok": report.chain_ok,
+            "merkle_ok": report.merkle_ok,
+            "raw_objects_ok": report.raw_objects_ok,
+            "redaction_auditable": report.redaction_auditable,
+            "signature_ok": report.signature_ok,
+        });
+        println!("{v}");
+        return Ok(());
+    }
     println!("run_id : {}", report.run_id);
     println!("events : {}", report.event_count);
     println!("chain  : {}", if report.chain_ok { "intact" } else { "BROKEN" });

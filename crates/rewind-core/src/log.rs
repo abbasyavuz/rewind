@@ -66,13 +66,18 @@ impl EventRecord {
     }
 }
 
-/// Derive a causal boundary id from lineage. This is the anti-swap primitive.
-pub fn causal_boundary_id(parent: Cid, spawn_hlc: Hlc, semantic_request_hash: Cid) -> Cid {
-    let mut buf = Vec::with_capacity(32 + 20 + 32);
-    buf.extend_from_slice(&parent.0);
-    buf.extend_from_slice(&spawn_hlc.wall_ms.to_be_bytes());
-    buf.extend_from_slice(&spawn_hlc.counter.to_be_bytes());
-    buf.extend_from_slice(&spawn_hlc.node.to_be_bytes());
-    buf.extend_from_slice(&semantic_request_hash.0);
+/// Derive a causal boundary id from lineage + request content. This is the
+/// anti-swap primitive AND the replay match key.
+///
+/// Deliberately NO clock: the id is a pure function of `(parent, semantic)`, so it
+/// reproduces bit-for-bit on replay. Because the parent advances after every
+/// boundary, sequential repeats of an identical request get distinct ids; only
+/// true concurrent siblings sharing one parent with identical requests collide —
+/// which the replay engine treats as ambiguous and FAILs LOUD (never serves an
+/// arbitrary cassette). The HLC stays in `EventRecord` for log order/audit only.
+pub fn causal_boundary_id(parent: Cid, semantic_request_hash: Cid) -> Cid {
+    let mut buf = [0u8; 64];
+    buf[..32].copy_from_slice(&parent.0);
+    buf[32..].copy_from_slice(&semantic_request_hash.0);
     Cid::of(&buf)
 }

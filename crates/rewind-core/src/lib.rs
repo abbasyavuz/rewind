@@ -28,7 +28,7 @@ pub use hlc::Hlc;
 pub use log::{causal_boundary_id, BoundaryKind, CaptureSurface, EventRecord};
 pub use manifest::{Manifest, Profile};
 pub use merkle::merkle_root;
-pub use verify::{verify_artifact, VerifyReport};
+pub use verify::{load_log, verify_artifact, VerifyReport};
 pub use writer::ArtifactWriter;
 
 #[cfg(test)]

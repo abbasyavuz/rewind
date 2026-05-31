@@ -6,11 +6,11 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 use rewind_core::attest::verifying_key_from_hex;
 use rewind_core::{
-    causal_boundary_id, verify_artifact, ArtifactWriter, BoundaryKind, CaptureSurface, Cid, Hlc,
-    Keypair, Profile,
+    causal_boundary_id, load_log, verify_artifact, ArtifactWriter, BoundaryKind, CaptureSurface,
+    Cid, Keypair, Profile,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -103,6 +103,15 @@ impl Writer {
         Ok((h.to_hex(), cbid.to_hex()))
     }
 
+    /// Stamp manifest determinism metadata (e.g. fork_of/fork_seq). Call before finalize.
+    fn set_determinism(&mut self, determinism: BTreeMap<String, String>) -> PyResult<()> {
+        self.inner
+            .as_mut()
+            .ok_or_else(|| err("writer already finalized"))?
+            .set_determinism(determinism);
+        Ok(())
+    }
+
     /// Sign and write manifest.cbor + attestation.cbor + log.cbor. Consumes the
     /// writer. `secret_key` is 32 bytes. Returns the public key (hex).
     fn finalize(&mut self, secret_key: Vec<u8>) -> PyResult<String> {
@@ -131,19 +140,32 @@ fn cid_hex(data: Vec<u8>) -> String {
     Cid::of(&data).to_hex()
 }
 
-/// The anti-swap causal boundary id, as hex. Exposed so Python can assert its
-/// reference implementation (events.derive_causal_boundary_id) stays byte-identical.
+/// The anti-swap causal boundary id (and replay match key), as hex. Exposed so
+/// the replay engine matches live calls byte-identically to the recording, and so
+/// Python can parity-check its reference derivation against rewind-core.
 #[pyfunction]
-fn causal_id_hex(
-    parent: Vec<u8>,
-    wall_ms: u64,
-    counter: u32,
-    node: u64,
-    semantic_hash: Vec<u8>,
-) -> PyResult<String> {
+fn causal_id_hex(parent: Vec<u8>, semantic_hash: Vec<u8>) -> PyResult<String> {
     let parent = cid_from_bytes(&parent)?;
     let semantic = cid_from_bytes(&semantic_hash)?;
-    Ok(causal_boundary_id(parent, Hlc { wall_ms, counter, node }, semantic).to_hex())
+    Ok(causal_boundary_id(parent, semantic).to_hex())
+}
+
+/// Load the event log for replay: a list of dicts with `seq`, `causal_boundary_id`
+/// (hex), `raw_cid` (hex), `kind`, `surface`. Integrity is NOT checked here.
+#[pyfunction]
+fn load_events(py: Python<'_>, dir: String) -> PyResult<Py<PyList>> {
+    let recs = load_log(&PathBuf::from(dir)).map_err(err)?;
+    let list = PyList::empty(py);
+    for r in recs {
+        let d = PyDict::new(py);
+        d.set_item("seq", r.seq)?;
+        d.set_item("causal_boundary_id", r.causal_boundary_id.to_hex())?;
+        d.set_item("raw_cid", r.raw_cid.to_hex())?;
+        d.set_item("kind", format!("{:?}", r.kind))?;
+        d.set_item("surface", format!("{:?}", r.capture_surface))?;
+        list.append(d)?;
+    }
+    Ok(list.into())
 }
 
 /// Verify an artifact directory; returns a dict of the checks.
@@ -174,6 +196,7 @@ fn rewind_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_secret_key, m)?)?;
     m.add_function(wrap_pyfunction!(cid_hex, m)?)?;
     m.add_function(wrap_pyfunction!(causal_id_hex, m)?)?;
+    m.add_function(wrap_pyfunction!(load_events, m)?)?;
     m.add_function(wrap_pyfunction!(verify, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

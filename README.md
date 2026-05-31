@@ -58,9 +58,40 @@ cargo build --release
 cd python/rewind && pip install -e ".[dev]"
 ```
 
-> Not: v0 iskeleti. `rewind-core` primitive'leri (CID/HLC/log/manifest/attest/verify) gerçek
-> ama uçtan-uca capture→replay→fork hattı Hafta 2-8'de inşa edilir. `// TODO(phase-N)` işaretleri
-> teknik plandaki fazlara bağlanır.
+```python
+import rewind, httpx
+with rewind.record("incident", out_dir="./incident.rewind"):
+    run_my_agent()                       # boundaries captured below the framework
+
+# Deterministic replay (no network): each boundary served from the recording.
+with rewind.replay("./incident.rewind") as rep:
+    run_my_agent()
+    print(rep.report())                  # {recorded, served, unused}; diverge -> FAIL LOUD
+
+# Counterfactual fork: "what if boundary 0 had returned X?" — rewind, change one
+# thing, watch the trajectory diverge. The deterministic prefix is identical.
+with rewind.fork("./incident.rewind", at=0, swap_response=(200, b'{"tool":"billing_db"}'),
+                 on_frontier=lambda req, body: httpx.Response(200, content=b'{"out":"fixed"}')) as fk:
+    run_my_agent()
+    print(fk.report())                   # {forked, fork_seq, frontier_hits, ...}
+```
+
+### Time-travel debugger (Rust CLI — offline, no Python)
+
+```bash
+rewind log    incident.rewind                 # timeline: one row per boundary (pipe to `less -R`)
+rewind show   incident.rewind 3               # one boundary's request+response (by seq or causal-id)
+rewind diff   incident.rewind fixed.rewind    # prefix · divergence · frontier  (exit 1 if diverged)
+rewind diff   incident.rewind fixed.rewind --verify   # refuses to diff a tampered side
+rewind log    x.rewind --json | jq …          # every command has a --json machine surface
+```
+
+`fork(..., record_to="fixed.rewind")` writes the counterfactual to a second signed artifact, so
+`rewind diff` shows — as a git-like, independently verifiable diff — that one changed boundary
+turned the failure into the fix.
+
+> Not: v0. **Capture + deterministik replay + counterfactual fork + time-travel debugger CLI çalışıyor.**
+> İnteraktif TUI v0.5 (teknik plan; v0'da `rewind log | less`). `// TODO(phase-N)` işaretleri fazlara bağlanır.
 
 ## Lisans
 

@@ -45,6 +45,12 @@ fn read(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|e| Error::Io(format!("{}: {e}", path.display())))
 }
 
+/// Load and CBOR-decode the event log for replay. This does NOT check integrity —
+/// pair it with [`verify_artifact`] when trust matters.
+pub fn load_log(dir: &Path) -> Result<Vec<EventRecord>> {
+    crate::cbor::from_slice(&read(&dir.join("log.cbor"))?)
+}
+
 pub fn verify_artifact(dir: &Path, trusted: Option<&VerifyingKey>) -> Result<VerifyReport> {
     let manifest = Manifest::from_cbor(&read(&dir.join("manifest.cbor"))?)?;
     let attestation = Attestation::from_cbor(&read(&dir.join("attestation.cbor"))?)?;

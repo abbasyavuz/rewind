@@ -86,7 +86,7 @@ impl ArtifactWriter {
             self.created_hlc = hlc;
         }
         let semantic_cid = Cid::of(semantic_request);
-        let cbid = crate::log::causal_boundary_id(parent, hlc, semantic_cid);
+        let cbid = crate::log::causal_boundary_id(parent, semantic_cid);
 
         let raw_cid = self.put_object(raw)?;
         let redacted_cid = match redacted {

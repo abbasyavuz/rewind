@@ -6,7 +6,7 @@ import httpx
 import rewind_native
 
 import rewind
-from rewind.events import ZERO_CID, Hlc, cid, derive_causal_boundary_id
+from rewind.events import ZERO_CID, cid, derive_causal_boundary_id
 
 
 def test_blake3_parity_python_vs_rust() -> None:
@@ -18,22 +18,20 @@ def test_blake3_parity_python_vs_rust() -> None:
 
 def test_causal_boundary_id_is_deterministic_and_matches_layout() -> None:
     parent = ZERO_CID
-    hlc = Hlc(wall_ms=1700000000000, counter=0, node=1)
     semantic = cid(b"some-request")
-    a = derive_causal_boundary_id(parent, hlc, semantic)
-    b = derive_causal_boundary_id(parent, hlc, semantic)
+    a = derive_causal_boundary_id(parent, semantic)
+    b = derive_causal_boundary_id(parent, semantic)
     assert a == b and len(a) == 32
-    assert a != derive_causal_boundary_id(cid(b"other"), hlc, semantic)
+    assert a != derive_causal_boundary_id(cid(b"other"), semantic)
 
 
 def test_causal_id_parity_python_vs_rust() -> None:
     """The Python reference derivation must stay byte-identical to rewind-core's —
     otherwise causal boundary ids won't match across record/replay."""
     parent = ZERO_CID
-    hlc = Hlc(wall_ms=1700000000000, counter=2, node=1)
     semantic = cid(b"a-request")
-    py = derive_causal_boundary_id(parent, hlc, semantic).hex()
-    native = rewind_native.causal_id_hex(parent, hlc.wall_ms, hlc.counter, hlc.node, semantic)
+    py = derive_causal_boundary_id(parent, semantic).hex()
+    native = rewind_native.causal_id_hex(parent, semantic)
     assert py == native
 
 

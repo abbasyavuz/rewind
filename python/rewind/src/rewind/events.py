@@ -7,7 +7,6 @@ is the Python-side view used during capture before handing bytes to rewind-core.
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -37,13 +36,12 @@ class CaptureSurface(str, Enum):
 
 @dataclass(frozen=True)
 class Hlc:
+    """Hybrid logical clock — log order / audit timestamp only (NOT part of the
+    causal boundary id, so replay stays deterministic)."""
+
     wall_ms: int
     counter: int
     node: int
-
-    def be_bytes(self) -> bytes:
-        # MUST match the byte layout in rewind-core::log::causal_boundary_id
-        return struct.pack(">Q", self.wall_ms) + struct.pack(">I", self.counter) + struct.pack(">Q", self.node)
 
 
 @dataclass
@@ -61,14 +59,15 @@ class EventRecord:
     meta: dict[str, str] = field(default_factory=dict)
 
 
-def derive_causal_boundary_id(parent: bytes, spawn_hlc: Hlc, semantic_request_hash: bytes) -> bytes:
-    """blake3(parent || spawn_hlc_be || semantic_request_hash).
+def derive_causal_boundary_id(parent: bytes, semantic_request_hash: bytes) -> bytes:
+    """blake3(parent || semantic_request_hash) — the anti-swap primitive and replay
+    match key (technical plan §3.1). NO clock, so it reproduces on replay.
 
-    Byte-for-byte identical to rewind-core::log::causal_boundary_id — the anti-swap
-    primitive (technical plan §3.1). Do not change one side without the other.
+    Byte-for-byte identical to rewind-core::log::causal_boundary_id (guarded by a
+    parity test). Do not change one side without the other.
     """
     assert len(parent) == 32 and len(semantic_request_hash) == 32
-    return cid(parent + spawn_hlc.be_bytes() + semantic_request_hash)
+    return cid(parent + semantic_request_hash)
 
 
 ZERO_CID = b"\x00" * 32

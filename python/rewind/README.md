@@ -29,6 +29,8 @@ with rewind.record("incident-123", out_dir="./incident-123.rewind"):
 | Causal boundary ids (anti-swap) | Concurrent-replay determinism (Spike-2) |
 | Deny-by-default nondeterminism guard + coverage report | Actual per-source shims (RNG/clock/vector store) |
 | Forensic commitment + auditable regex redaction | Presidio backend; streaming/SSE tee |
-| **PyO3 binding → real signed `.rewind`** (chain/Merkle/Ed25519 via rewind-core) | Replay + counterfactual fork (Phase-2) |
+| **PyO3 binding → real signed `.rewind`** (chain/Merkle/Ed25519 via rewind-core) | — |
+| **Deterministic replay** (match by causal id, serve from recording, FAIL LOUD on divergence/ambiguity) | — |
+| **Counterfactual fork** (deterministic prefix, swap one boundary's response, live-frontier past it) | Time-travel debugger UI; prompt-edit perturbations |
 
 See [`../../docs/rewind-technical-plan.md`](../../docs/rewind-technical-plan.md).

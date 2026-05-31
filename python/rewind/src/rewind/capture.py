@@ -39,8 +39,27 @@ def _semantic_request_canon(request: httpx.Request, body: bytes) -> bytes:
     return b"\n".join([request.method.encode(), str(request.url).encode(), body])
 
 
+def frame_blob(request: httpx.Request, req_body: bytes, status: int, body: bytes | str) -> bytes:
+    """The framed boundary blob = the raw pre-redaction bytes rewind-core commits to.
+    Shared by record (capture) and fork (replay tee) so both produce the SAME shape."""
+    body_s = body.decode("utf-8", "replace") if isinstance(body, (bytes, bytearray)) else str(body)
+    return json.dumps(
+        {
+            "request": {
+                "method": request.method,
+                "url": str(request.url),
+                "body": req_body.decode("utf-8", "replace"),
+            },
+            "response": {"status": status, "body": body_s},
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 class Recorder:
     """Feeds boundaries into a signed `.rewind` artifact via rewind-core."""
+
+    mode = "record"
 
     def __init__(self, run_id: str, out_dir: str, strict: bool = True) -> None:
         from .guard import Guard
@@ -69,24 +88,10 @@ class Recorder:
         resp_body: bytes,
         meta: dict[str, str],
     ) -> None:
-        ctx = context.current()
-        if ctx is None:
-            return
         self.guard.assert_covered("http.httpx")
 
         canon = _semantic_request_canon(request, req_body)
-        # The framed boundary blob = the raw pre-redaction bytes rewind-core commits to.
-        blob = json.dumps(
-            {
-                "request": {
-                    "method": request.method,
-                    "url": str(request.url),
-                    "body": req_body.decode("utf-8", "replace"),
-                },
-                "response": {"status": resp_status, "body": resp_body.decode("utf-8", "replace")},
-            },
-            separators=(",", ":"),
-        ).encode("utf-8")
+        blob = frame_blob(request, req_body, resp_status, resp_body)
 
         c = commit(blob, self.disclosure_key)
         record_hash_hex, cbid_hex = self._writer.append(
@@ -149,22 +154,26 @@ def install(strict: bool = True) -> None:
     _ORIG_ASYNC = httpx.AsyncHTTPTransport.handle_async_request
 
     def handle_request(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
-        ctx = context.current()
-        req_body = request.read() if ctx is not None else b""
+        session = context.current()
+        if session is None:
+            return _ORIG_SYNC(self, request)  # type: ignore[misc]
+        if session.mode == "replay":
+            return session.serve(request, request.read())  # no network in replay
+        req_body = request.read()
         response = _ORIG_SYNC(self, request)  # type: ignore[misc]
-        if ctx is None:
-            return response
-        return _tee(ctx.recorder, request, req_body, response, response.read())
+        return _tee(session, request, req_body, response, response.read())
 
     async def handle_async_request(
         self: httpx.AsyncHTTPTransport, request: httpx.Request
     ) -> httpx.Response:
-        ctx = context.current()
-        req_body = await request.aread() if ctx is not None else b""
+        session = context.current()
+        if session is None:
+            return await _ORIG_ASYNC(self, request)  # type: ignore[misc]
+        if session.mode == "replay":
+            return session.serve(request, await request.aread())  # no network in replay
+        req_body = await request.aread()
         response = await _ORIG_ASYNC(self, request)  # type: ignore[misc]
-        if ctx is None:
-            return response
-        return _tee(ctx.recorder, request, req_body, response, await response.aread())
+        return _tee(session, request, req_body, response, await response.aread())
 
     httpx.HTTPTransport.handle_request = handle_request  # type: ignore[method-assign]
     httpx.AsyncHTTPTransport.handle_async_request = handle_async_request  # type: ignore[method-assign]
