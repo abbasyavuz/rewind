@@ -11,9 +11,10 @@ Setup (once):
     # then paste your key into .env at the repo root:  OPENROUTER_API_KEY=sk-or-...
 
 Run:
-    python examples/openrouter_agent.py record   # REAL minimax/minimax-m3 run (needs key)
-    python examples/openrouter_agent.py replay    # reproduce offline (no key, no network)
-    python examples/openrouter_agent.py fork       # counterfactual: swap the classification
+    python examples/openrouter_agent.py record       # REAL minimax/minimax-m3 run (needs key)
+    python examples/openrouter_agent.py replay        # reproduce offline (no key, no network)
+    python examples/openrouter_agent.py fork           # counterfactual, canned frontier (offline)
+    python examples/openrouter_agent.py fork --live    # counterfactual, frontier asked LIVE to the model
 
 Inspect with the Rust CLI (offline, no Python):
     cargo run -q -p rewind-cli -- log  runs/support.rewind
@@ -63,6 +64,27 @@ def offline_client() -> OpenAI:
     # Replay/fork never reach the network (the hook serves from the recording), so a
     # dummy key is fine — canonicalization ignores headers, only method+url+body match.
     return OpenAI(api_key="offline-replay", base_url=BASE_URL)
+
+
+def live_frontier(request: httpx.Request, req_body: bytes) -> httpx.Response:
+    """The counterfactual branch ACTUALLY asks the model: send a divergent post-fork
+    request live to OpenRouter and return the real response. We clear the rewind
+    session first so this call hits the network instead of recursing into the fork.
+    (The fork agent must use the real key so this request carries valid auth.)"""
+    from rewind import context as rctx
+
+    token = rctx.set_current(None)  # leave the session -> the hook passes through to the network
+    try:
+        req_drop = {"host", "content-length", "transfer-encoding"}
+        headers = [(k, v) for k, v in request.headers.items() if k.lower() not in req_drop]
+        with httpx.Client(timeout=60) as hc:
+            live = hc.request(request.method, str(request.url), headers=headers, content=req_body)
+            body = live.read()
+        resp_drop = {"content-encoding", "content-length", "transfer-encoding"}
+        rheaders = [(k, v) for k, v in live.headers.items() if k.lower() not in resp_drop]
+        return httpx.Response(live.status_code, headers=rheaders, content=body, request=request)
+    finally:
+        rctx.reset_current(token)
 
 
 def ask(client: OpenAI, system: str, user: str) -> str:
@@ -128,27 +150,32 @@ def cmd_replay() -> None:
     print("  coverage:", rep.report())
 
 
-def cmd_fork() -> None:
+def cmd_fork(live: bool = False) -> None:
     swap_to = os.environ.get("SWAP_CATEGORY", "technical")
     swap_body = _with_content(_completion_template(0), swap_to)
-    reply_template = _completion_template(1)
 
-    def frontier(request: httpx.Request, req_body: bytes) -> httpx.Response:
-        # The reply request diverges (new category in the prompt). In production this
-        # would be a LIVE model call; offline we synthesize a valid completion.
-        content = f"(counterfactual) Routing this as '{swap_to}' — escalating to the right team now."
-        return httpx.Response(
-            200,
-            headers={"content-type": "application/json"},
-            content=_with_content(reply_template, content),
-            request=request,
-        )
+    if live:
+        # The frontier reply is generated LIVE by the model for the swapped category.
+        on_frontier = live_frontier
+        client = live_client()  # real key: divergent requests go live with valid auth
+        print(f"counterfactual (LIVE frontier): swap classification to '{swap_to}', then ask `{MODEL}` for real…\n")
+    else:
+        reply_template = _completion_template(1)
 
-    print(f"counterfactual: what if the classifier returned '{swap_to}' at boundary 0?\n")
+        def on_frontier(request: httpx.Request, req_body: bytes) -> httpx.Response:
+            content = f"(canned) Routing this as '{swap_to}' — escalating to the right team now."
+            return httpx.Response(
+                200, headers={"content-type": "application/json"},
+                content=_with_content(reply_template, content), request=request,
+            )
+
+        client = offline_client()
+        print(f"counterfactual (canned frontier): swap classification to '{swap_to}'…\n")
+
     with rewind.fork(
-        ARTIFACT, at=0, swap_response=(200, swap_body), on_frontier=frontier, record_to=FORKED
+        ARTIFACT, at=0, swap_response=(200, swap_body), on_frontier=on_frontier, record_to=FORKED
     ) as fk:
-        category, reply = agent(offline_client())
+        category, reply = agent(client)
     print(f"  classified as : {category}")
     print(f"  agent reply   : {reply}")
     print("  report:", fk.report())
@@ -158,10 +185,16 @@ def cmd_fork() -> None:
 
 
 def main() -> None:
-    mode = sys.argv[1] if len(sys.argv) > 1 else "record"
-    {"record": cmd_record, "replay": cmd_replay, "fork": cmd_fork}.get(
-        mode, lambda: sys.exit(f"unknown mode '{mode}' — use: record | replay | fork")
-    )()
+    args = sys.argv[1:]
+    mode = args[0] if args else "record"
+    if mode == "record":
+        cmd_record()
+    elif mode == "replay":
+        cmd_replay()
+    elif mode == "fork":
+        cmd_fork(live=("--live" in args))
+    else:
+        sys.exit(f"unknown mode '{mode}' — use: record | replay | fork [--live]")
 
 
 if __name__ == "__main__":
