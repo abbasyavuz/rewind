@@ -17,6 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+# examples/openrouter_agent.py — real OpenRouter capture via the OpenAI SDK
+examples = ["openai>=1.40", "python-dotenv>=1.0"]
 # redaction backend (optional, heavy); v0 ships a regex fallback in commitment.py
 pii = ["presidio-analyzer>=2.2"]
 

@@ -246,16 +246,49 @@ pub fn cmd_show(
 
 // ---------- rewind diff ----------
 
+/// A compact line-level diff: trim the common prefix/suffix and show only the
+/// changed lines plus a little context (so a one-field change reads as one hunk,
+/// not the whole body). v0 line-level; semantic JSON diff is TODO(phase-1).
 fn body_diff(old: &str, new: &str) -> Vec<String> {
-    if old == new {
+    let op = pretty_json(old);
+    let np = pretty_json(new);
+    if op == np {
         return vec![];
     }
-    let mut out = Vec::new();
-    for line in pretty_json(old).lines() {
-        out.push(format!("- {line}"));
+    let o: Vec<&str> = op.lines().collect();
+    let n: Vec<&str> = np.lines().collect();
+
+    let mut p = 0;
+    while p < o.len() && p < n.len() && o[p] == n[p] {
+        p += 1;
     }
-    for line in pretty_json(new).lines() {
-        out.push(format!("+ {line}"));
+    let mut s = 0;
+    while s < o.len() - p && s < n.len() - p && o[o.len() - 1 - s] == n[n.len() - 1 - s] {
+        s += 1;
+    }
+
+    const CTX: usize = 2;
+    let mut out = Vec::new();
+    let lead = p.saturating_sub(CTX);
+    if lead > 0 {
+        out.push(format!("  ⋯ {lead} unchanged"));
+    }
+    for l in &o[lead..p] {
+        out.push(format!("  {l}"));
+    }
+    for l in &o[p..o.len() - s] {
+        out.push(format!("- {l}"));
+    }
+    for l in &n[p..n.len() - s] {
+        out.push(format!("+ {l}"));
+    }
+    let tail_end = (o.len() - s + CTX).min(o.len());
+    for l in &o[o.len() - s..tail_end] {
+        out.push(format!("  {l}"));
+    }
+    let tail_rest = o.len() - tail_end;
+    if tail_rest > 0 {
+        out.push(format!("  ⋯ {tail_rest} unchanged"));
     }
     out
 }

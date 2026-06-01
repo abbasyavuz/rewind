@@ -132,9 +132,14 @@ def _tee(
         resp_body=body,
         meta={"host": request.url.host},
     )
+    # `body` is already decoded (response.read() decompressed it). Drop the
+    # content-encoding/length headers so the consumer doesn't try to decompress
+    # decompressed bytes (otherwise: httpx DecodingError / zlib "incorrect header").
+    drop = {"content-encoding", "content-length", "transfer-encoding"}
+    headers = [(k, v) for k, v in response.headers.items() if k.lower() not in drop]
     return httpx.Response(
         status_code=response.status_code,
-        headers=response.headers,
+        headers=headers,
         content=body,
         request=request,
         extensions=response.extensions,

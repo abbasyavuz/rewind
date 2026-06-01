@@ -44,9 +44,13 @@ def _match_id(parent: bytes, request: httpx.Request, req_body: bytes) -> str:
 def _recorded_response(objects: Path, event: dict, request: httpx.Request) -> httpx.Response:
     raw = (objects / f"b3-{event['raw_cid']}.bin").read_bytes()
     resp = json.loads(raw)["response"]
-    # v0: bodies were captured as text; binary-faithful replay is TODO(phase-3).
+    # v0: bodies were captured as text (LLM APIs are JSON); binary-faithful replay
+    # is TODO(phase-3). content-type lets strict SDKs (e.g. openai) parse the body.
     return httpx.Response(
-        status_code=resp["status"], content=resp["body"].encode("utf-8"), request=request
+        status_code=resp["status"],
+        headers={"content-type": "application/json"},
+        content=resp["body"].encode("utf-8"),
+        request=request,
     )
 
 
@@ -185,7 +189,12 @@ class Forker(_Session):
             if cbid == self._fork_id and not self._forked:
                 self._forked = True
                 status, body = self._swap
-                resp = httpx.Response(status_code=status, content=body, request=request)
+                resp = httpx.Response(
+                    status_code=status,
+                    headers={"content-type": "application/json"},
+                    content=body,
+                    request=request,
+                )
                 self._tee(parent, request, req_body, resp, "swap", event["kind"], event["surface"])
                 return resp
             resp = _recorded_response(self.objects, event, request)
