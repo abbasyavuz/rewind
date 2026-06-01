@@ -35,6 +35,27 @@ def test_causal_id_parity_python_vs_rust() -> None:
     assert py == native
 
 
+def test_streaming_tee_preserves_chunks_and_records_full_body() -> None:
+    """SSE fix: each chunk reaches the consumer as it arrives (TTFT preserved), and
+    the full body is committed exactly once when the stream ends — not buffered first."""
+    from rewind.capture import _TeeSyncStream
+
+    chunks = [b"data: a\n\n", b"data: b\n\n", b"data: [DONE]\n\n"]
+
+    class _Inner(httpx.SyncByteStream):
+        def __iter__(self):
+            yield from chunks
+
+        def close(self) -> None:
+            pass
+
+    captured: dict[str, bytes] = {}
+    tee = _TeeSyncStream(_Inner(), lambda b: captured.__setitem__("body", b))
+    out = list(tee)  # the consumer sees every chunk, in order
+    assert out == chunks
+    assert captured["body"] == b"".join(chunks)  # full body committed once, at the end
+
+
 def test_record_then_sign_then_verify_end_to_end(tmp_path) -> None:
     out = str(tmp_path / "run.rewind")
 

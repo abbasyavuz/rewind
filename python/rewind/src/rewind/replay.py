@@ -44,12 +44,16 @@ def _match_id(parent: bytes, request: httpx.Request, req_body: bytes) -> str:
 def _recorded_response(objects: Path, event: dict, request: httpx.Request) -> httpx.Response:
     raw = (objects / f"b3-{event['raw_cid']}.bin").read_bytes()
     resp = json.loads(raw)["response"]
-    # v0: bodies were captured as text (LLM APIs are JSON); binary-faithful replay
-    # is TODO(phase-3). content-type lets strict SDKs (e.g. openai) parse the body.
+    body = resp["body"]
+    # Detect a recorded SSE stream so a streaming consumer (e.g. openai stream=True)
+    # parses it; otherwise serve as JSON. v0: bodies are text (LLM APIs are JSON/SSE);
+    # binary-faithful replay is TODO(phase-3).
+    is_sse = body.lstrip()[:6] == "data: " or "\ndata: " in body[:256]
+    ctype = "text/event-stream" if is_sse else "application/json"
     return httpx.Response(
         status_code=resp["status"],
-        headers={"content-type": "application/json"},
-        content=resp["body"].encode("utf-8"),
+        headers={"content-type": ctype},
+        content=body.encode("utf-8"),
         request=request,
     )
 

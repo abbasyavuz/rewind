@@ -146,11 +146,110 @@ def _tee(
     )
 
 
-def install(strict: bool = True) -> None:
-    """Patch the httpx transports to tee raw bytes into the active Recorder.
+def _is_streaming(response: httpx.Response) -> bool:
+    return "text/event-stream" in response.headers.get("content-type", "").lower()
 
-    Idempotent. Non-streaming only in v0 (SSE tee is TODO(phase-1)). When no run is
-    active, calls pass through untouched.
+
+def _record_streamed(
+    recorder: Recorder,
+    request: httpx.Request,
+    req_body: bytes,
+    response: httpx.Response,
+    body: bytes,
+) -> None:
+    recorder.record_boundary(
+        kind=BoundaryKind.MODEL_CALL,
+        surface=CaptureSurface.SDK_HTTPX,
+        request=request,
+        req_body=req_body,
+        resp_status=response.status_code,
+        resp_body=body,
+        meta={"host": request.url.host, "stream": "sse"},
+    )
+
+
+class _TeeSyncStream(httpx.SyncByteStream):
+    """Yields each chunk to the caller (token-by-token streaming preserved) while
+    teeing a copy into a buffer; commits the boundary only when the stream ends/closes.
+    This keeps TTFT intact for streaming agents instead of buffering the whole body."""
+
+    def __init__(self, inner: httpx.SyncByteStream, on_done) -> None:
+        self._inner = inner
+        self._on_done = on_done
+        self._buf = bytearray()
+        self._fired = False
+
+    def __iter__(self):
+        for chunk in self._inner:
+            self._buf.extend(chunk)
+            yield chunk
+        self._fire()
+
+    def close(self) -> None:
+        try:
+            self._inner.close()
+        finally:
+            self._fire()  # commit even on early cancel (partial body)
+
+    def _fire(self) -> None:
+        if not self._fired:
+            self._fired = True
+            self._on_done(bytes(self._buf))
+
+
+class _TeeAsyncStream(httpx.AsyncByteStream):
+    def __init__(self, inner: httpx.AsyncByteStream, on_done) -> None:
+        self._inner = inner
+        self._on_done = on_done
+        self._buf = bytearray()
+        self._fired = False
+
+    async def __aiter__(self):
+        async for chunk in self._inner:
+            self._buf.extend(chunk)
+            yield chunk
+        self._fire()
+
+    async def aclose(self) -> None:
+        try:
+            await self._inner.aclose()
+        finally:
+            self._fire()
+
+    def _fire(self) -> None:
+        if not self._fired:
+            self._fired = True
+            self._on_done(bytes(self._buf))
+
+
+def _tee_stream_sync(recorder, request, req_body, response):
+    tee = _TeeSyncStream(
+        response.stream,
+        lambda body: _record_streamed(recorder, request, req_body, response, body),
+    )
+    return httpx.Response(
+        status_code=response.status_code, headers=response.headers,
+        stream=tee, request=request, extensions=response.extensions,
+    )
+
+
+def _tee_stream_async(recorder, request, req_body, response):
+    tee = _TeeAsyncStream(
+        response.stream,
+        lambda body: _record_streamed(recorder, request, req_body, response, body),
+    )
+    return httpx.Response(
+        status_code=response.status_code, headers=response.headers,
+        stream=tee, request=request, extensions=response.extensions,
+    )
+
+
+def install(strict: bool = True) -> None:
+    """Patch the httpx transports to tee bytes into the active Recorder.
+
+    Streaming (SSE) responses are teed incrementally (TTFT preserved); non-streaming
+    responses are buffered+decoded. When no run is active, calls pass through untouched.
+    Idempotent.
     """
     global _PATCHED, _ORIG_SYNC, _ORIG_ASYNC
     if _PATCHED:
@@ -166,6 +265,8 @@ def install(strict: bool = True) -> None:
             return session.serve(request, request.read())  # no network in replay
         req_body = request.read()
         response = _ORIG_SYNC(self, request)  # type: ignore[misc]
+        if _is_streaming(response):
+            return _tee_stream_sync(session, request, req_body, response)
         return _tee(session, request, req_body, response, response.read())
 
     async def handle_async_request(
@@ -178,6 +279,8 @@ def install(strict: bool = True) -> None:
             return session.serve(request, await request.aread())  # no network in replay
         req_body = await request.aread()
         response = await _ORIG_ASYNC(self, request)  # type: ignore[misc]
+        if _is_streaming(response):
+            return _tee_stream_async(session, request, req_body, response)
         return _tee(session, request, req_body, response, await response.aread())
 
     httpx.HTTPTransport.handle_request = handle_request  # type: ignore[method-assign]
