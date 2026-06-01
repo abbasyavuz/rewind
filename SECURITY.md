@@ -17,9 +17,8 @@ We aim to acknowledge within a few days. Please include a reproduction and the a
 
 - Verifier bypass: a modified artifact that still verifies (chain / Merkle / Ed25519 / cbid-uniqueness).
 - Silent replay/fork divergence (a wrong cassette served instead of FAIL LOUD).
-- Redaction / selective-disclosure weaknesses that leak committed secrets (note: the format spec
-  already documents that v0 inclusion proofs are *integrity*, not confidentiality — see
-  `spec/rewind-format-v0.1-DRAFT.md` §5).
+- Redaction / selective-disclosure weaknesses that leak committed secrets (note: v0 Merkle inclusion
+  proofs provide *integrity*, not confidentiality).
 
 ## Handling secrets
 

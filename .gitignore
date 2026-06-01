@@ -30,3 +30,7 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# Internal strategy / planning docs — keep local, NOT on GitHub
+/docs/
+/spec/

@@ -130,13 +130,15 @@ captured with zero SDK changes. See [`examples/`](examples/):
 
 ## Evidence
 
-We don't just claim the moat — we [pre-registered thresholds](spec/pivot-thresholds.md) and measured:
+We don't just claim the moat — we pre-registered thresholds and measured it with runnable harnesses:
 
-- **[Spike-1: divergence-envelope](spec/spikes/spike-1-findings.md)** — closed-API single-sample
-  attribution is easy when the model is confident and **poor/unmeasurable near the decision boundary**
-  (the identifiability wall). This is *why* the headline moat is OSS-bitwise, not closed-API forensics.
-- **[Bitwise-OSS replay](spec/spikes/spike-oss-bitwise-findings.md)** — on a self-hosted model the
-  noise floor is 0 *because we hold the seed*, so fork divergence is provably edit-caused.
+- **[`spikes/spike1_envelope.py`](spikes/spike1_envelope.py)** (divergence-envelope) — closed-API
+  single-sample attribution is easy when the model is confident and **poor/unmeasurable near the
+  decision boundary** (the identifiability wall). This is *why* the headline moat is OSS-bitwise, not
+  closed-API forensics.
+- **[`spikes/spike_oss_bitwise.py`](spikes/spike_oss_bitwise.py)** (bitwise-OSS replay) — on a
+  self-hosted model the noise floor is 0 *because we hold the seed*, so fork divergence is provably
+  edit-caused.
 
 ## How it works
 
@@ -149,7 +151,7 @@ your agent ──(httpx transport hook)──► capture ──► rewind-core (
 
 Causal boundary ids chain on lineage + request content (no clock), so they reproduce on replay; the
 parent advances each step so sequential repeats stay distinct and only true concurrent collisions are
-refused. Full architecture + roadmap: [`docs/rewind-technical-plan.md`](docs/rewind-technical-plan.md).
+refused.
 
 ## Status
 
@@ -164,11 +166,10 @@ MCP-over-stdio interceptors are fast-follows. `# TODO(phase-N)` markers map to t
 ## Repo layout
 
 ```
-docs/      idea brief + the finalized technical plan (architecture, roadmap, risks)
-spec/      .rewind format, pre-registered pivot thresholds, spike plans + findings
 crates/    rewind-core (the .rewind engine) · rewind-cli (verify · log · show · diff)
 python/    the capture / replay / fork / Deterministic SDK
-examples/  real agents (OpenRouter + Ollama); spikes/  the measurement harnesses
+examples/  real agents (OpenRouter + Ollama)
+spikes/    the measurement harnesses (envelope + bitwise-OSS)
 ```
 
 ## License

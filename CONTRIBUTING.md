@@ -31,6 +31,5 @@ make test     # cargo test + pytest
 - `crates/rewind-py` — PyO3 bindings → `rewind_native`.
 - `python/rewind` — the capture/replay/fork/`Deterministic` SDK.
 - `examples/`, `spikes/` — runnable real-agent demos and the measurement harnesses.
-- `docs/`, `spec/` — the technical plan, the format, pre-registered thresholds and spike findings.
 
 By contributing you agree your contributions are licensed under [Apache-2.0](LICENSE).
