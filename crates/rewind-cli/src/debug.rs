@@ -49,7 +49,16 @@ pub fn decode(objects: &Path, rec: &EventRecord) -> Boundary {
             decodable = true;
         }
     }
-    Boundary { raw_ok, decodable, method, url, req_body, status, resp_body, raw_bytes }
+    Boundary {
+        raw_ok,
+        decodable,
+        method,
+        url,
+        req_body,
+        status,
+        resp_body,
+        raw_bytes,
+    }
 }
 
 fn short(s: &str, n: usize) -> String {
@@ -91,8 +100,11 @@ pub fn cmd_log(
     let objects = dir.join("objects");
 
     let pass = |r: &EventRecord| {
-        kind.as_ref().is_none_or(|k| kind_str(r).eq_ignore_ascii_case(k))
-            && surface.as_ref().is_none_or(|s| surface_str(r).eq_ignore_ascii_case(s))
+        kind.as_ref()
+            .is_none_or(|k| kind_str(r).eq_ignore_ascii_case(k))
+            && surface
+                .as_ref()
+                .is_none_or(|s| surface_str(r).eq_ignore_ascii_case(s))
             && from.is_none_or(|f| r.seq >= f)
             && to.is_none_or(|t| r.seq <= t)
     };
@@ -110,19 +122,28 @@ pub fn cmd_log(
             );
         }
         if !oneline {
-            println!("{:>4}  {:<12}  {:<11}  {:<8}  {:<2}  {:<4}  summary", "seq", "cbid", "kind", "surface", "ok", "stat");
+            println!(
+                "{:>4}  {:<12}  {:<11}  {:<8}  {:<2}  {:<4}  summary",
+                "seq", "cbid", "kind", "surface", "ok", "stat"
+            );
         }
     }
 
-    let mut shown = 0usize;
-    for rec in records.iter().filter(|r| pass(r)) {
-        if limit.is_some_and(|n| shown >= n) {
-            break;
-        }
-        shown += 1;
+    let rows = records
+        .iter()
+        .filter(|r| pass(r))
+        .take(limit.unwrap_or(usize::MAX));
+    for rec in rows {
         let b = decode(&objects, rec);
-        let summary = b.resp_body.as_deref().map(|s| short(s, 60)).unwrap_or_default();
-        let stat = b.status.map(|s| s.to_string()).unwrap_or_else(|| "-".into());
+        let summary = b
+            .resp_body
+            .as_deref()
+            .map(|s| short(s, 60))
+            .unwrap_or_default();
+        let stat = b
+            .status
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "-".into());
         if json {
             let v = serde_json::json!({
                 "seq": rec.seq,
@@ -138,7 +159,14 @@ pub fn cmd_log(
             });
             println!("{v}");
         } else if oneline {
-            println!("{:>4}  {}  {:<11}  {}  {}", rec.seq, &cbid(rec)[..12], kind_str(rec), stat, summary);
+            println!(
+                "{:>4}  {}  {:<11}  {}  {}",
+                rec.seq,
+                &cbid(rec)[..12],
+                kind_str(rec),
+                stat,
+                summary
+            );
         } else {
             println!(
                 "{:>4}  {:<12}  {:<11}  {:<8}  {:<2}  {:<4}  {}",
@@ -168,14 +196,22 @@ fn resolve<'a>(records: &'a [EventRecord], selector: &str) -> Result<&'a EventRe
             .find(|r| r.seq == seq)
             .with_context(|| format!("no boundary with seq {seq}"));
     }
-    let matches: Vec<&EventRecord> =
-        records.iter().filter(|r| cbid(r).starts_with(selector)).collect();
+    let matches: Vec<&EventRecord> = records
+        .iter()
+        .filter(|r| cbid(r).starts_with(selector))
+        .collect();
     match matches.len() {
         1 => Ok(matches[0]),
         0 => bail!("no boundary with causal id prefix '{selector}'"),
         _ => {
-            let cands: Vec<String> = matches.iter().map(|r| format!("seq {} ({})", r.seq, &cbid(r)[..16])).collect();
-            bail!("ambiguous causal id prefix '{selector}' — candidates:\n  {}", cands.join("\n  "))
+            let cands: Vec<String> = matches
+                .iter()
+                .map(|r| format!("seq {} ({})", r.seq, &cbid(r)[..16]))
+                .collect();
+            bail!(
+                "ambiguous causal id prefix '{selector}' — candidates:\n  {}",
+                cands.join("\n  ")
+            )
         }
     }
 }
@@ -209,7 +245,10 @@ pub fn cmd_show(
         if b.raw_ok {
             format!("✓ matches b3-{}", rec.raw_cid.to_hex())
         } else {
-            format!("✗ MISMATCH — displayed bytes do not hash to b3-{}", rec.raw_cid.to_hex())
+            format!(
+                "✗ MISMATCH — displayed bytes do not hash to b3-{}",
+                rec.raw_cid.to_hex()
+            )
         }
     );
 
@@ -230,13 +269,20 @@ pub fn cmd_show(
     }
     if show_req {
         println!("\n── request ──");
-        println!("{} {}", b.method.as_deref().unwrap_or("?"), b.url.as_deref().unwrap_or("?"));
+        println!(
+            "{} {}",
+            b.method.as_deref().unwrap_or("?"),
+            b.url.as_deref().unwrap_or("?")
+        );
         if let Some(body) = &b.req_body {
             println!("{}", pretty_json(body));
         }
     }
     if show_resp {
-        println!("\n── response ── {}", b.status.map(|s| s.to_string()).unwrap_or_default());
+        println!(
+            "\n── response ── {}",
+            b.status.map(|s| s.to_string()).unwrap_or_default()
+        );
         if let Some(body) = &b.resp_body {
             println!("{}", pretty_json(body));
         }
@@ -351,13 +397,22 @@ pub fn cmd_diff(
     let frontier_a = ra.len() - i; // original-only tail (path not taken)
     let frontier_b = rb.len() - i; // fork-only tail (new branch)
 
-    let diverged_seq = changed.first().copied().or(if frontier_a + frontier_b > 0 { Some(i) } else { None });
-    let fork_seq = read_manifest(b).and_then(|m| m.determinism).and_then(|d| d.get("fork_seq").cloned());
+    let diverged_seq = changed.first().copied().or(if frontier_a + frontier_b > 0 {
+        Some(i)
+    } else {
+        None
+    });
+    let fork_seq = read_manifest(b)
+        .and_then(|m| m.determinism)
+        .and_then(|d| d.get("fork_seq").cloned());
 
     // --stat header.
     print!("prefix: {prefix} identical");
     match diverged_seq {
-        Some(d) => print!(" · diverged at seq {}", ra.get(d).map(|r| r.seq).unwrap_or(d as u64)),
+        Some(d) => print!(
+            " · diverged at seq {}",
+            ra.get(d).map(|r| r.seq).unwrap_or(d as u64)
+        ),
         None => print!(" · no divergence"),
     }
     if let Some(fs) = &fork_seq {
@@ -373,27 +428,56 @@ pub fn cmd_diff(
             if boundary.is_some_and(|sel| ra[c].seq != sel) {
                 continue;
             }
-            println!("\n@@ seq {} ({}) — same request, response changed @@", ra[c].seq, &cbid(&ra[c])[..12]);
+            println!(
+                "\n@@ seq {} ({}) — same request, response changed @@",
+                ra[c].seq,
+                &cbid(&ra[c])[..12]
+            );
             let da = decode(&oa, &ra[c]);
             let db = decode(&ob, &rb[c]);
             if da.status != db.status {
-                println!("- status {}", da.status.map(|s| s.to_string()).unwrap_or_else(|| "?".into()));
-                println!("+ status {}", db.status.map(|s| s.to_string()).unwrap_or_else(|| "?".into()));
+                println!(
+                    "- status {}",
+                    da.status
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "?".into())
+                );
+                println!(
+                    "+ status {}",
+                    db.status
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "?".into())
+                );
             }
-            for line in body_diff(da.resp_body.as_deref().unwrap_or(""), db.resp_body.as_deref().unwrap_or("")) {
+            for line in body_diff(
+                da.resp_body.as_deref().unwrap_or(""),
+                db.resp_body.as_deref().unwrap_or(""),
+            ) {
                 println!("{line}");
             }
         }
         // FRONTIER — never a fabricated 1:1 pairing.
         if (frontier_a > 0 || frontier_b > 0) && boundary.is_none() {
-            println!("\n@@ frontier (unaligned — the path not taken vs the counterfactual branch) @@");
+            println!(
+                "\n@@ frontier (unaligned — the path not taken vs the counterfactual branch) @@"
+            );
             for r in &ra[i..] {
                 let d = decode(&oa, r);
-                println!("- seq {} {} -> {}", r.seq, d.method.as_deref().unwrap_or("?"), short(d.resp_body.as_deref().unwrap_or(""), 70));
+                println!(
+                    "- seq {} {} -> {}",
+                    r.seq,
+                    d.method.as_deref().unwrap_or("?"),
+                    short(d.resp_body.as_deref().unwrap_or(""), 70)
+                );
             }
             for r in &rb[i..] {
                 let d = decode(&ob, r);
-                println!("+ seq {} {} -> {}", r.seq, d.method.as_deref().unwrap_or("?"), short(d.resp_body.as_deref().unwrap_or(""), 70));
+                println!(
+                    "+ seq {} {} -> {}",
+                    r.seq,
+                    d.method.as_deref().unwrap_or("?"),
+                    short(d.resp_body.as_deref().unwrap_or(""), 70)
+                );
             }
         }
     }

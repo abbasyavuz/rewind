@@ -57,10 +57,13 @@ class Deterministic:
             d = json.loads(body)
         except Exception:
             return body
+        # FORCE the sampler to be deterministic (don't just setdefault — the agent
+        # may already carry temperature=1.0 / its own options.seed).
         d["seed"] = self.seed
-        d.setdefault("temperature", 0)
+        d["temperature"] = 0
         opts = d.get("options") or {}
-        opts.setdefault("seed", self.seed)
+        opts["seed"] = self.seed
+        opts["temperature"] = 0
         d["options"] = opts
         return json.dumps(d).encode()
 
@@ -77,7 +80,7 @@ class Deterministic:
                 **self.extra_headers,
             }
             with httpx.Client(timeout=120) as hc:
-                live = hc.post(str(request.url), headers=headers, content=body)
+                live = hc.request(request.method, str(request.url), headers=headers, content=body)
                 data = live.read()
             drop = {"content-encoding", "content-length", "transfer-encoding"}
             rh = [(k, v) for k, v in live.headers.items() if k.lower() not in drop]

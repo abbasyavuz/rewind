@@ -33,7 +33,12 @@ pub struct ArtifactWriter {
 }
 
 impl ArtifactWriter {
-    pub fn create<P: AsRef<Path>>(dir: P, run_id: &str, profile: Profile, node: u64) -> Result<Self> {
+    pub fn create<P: AsRef<Path>>(
+        dir: P,
+        run_id: &str,
+        profile: Profile,
+        node: u64,
+    ) -> Result<Self> {
         let dir = dir.as_ref().to_path_buf();
         let objects_dir = dir.join("objects");
         fs::create_dir_all(&objects_dir)?;
@@ -133,7 +138,10 @@ impl ArtifactWriter {
     /// Write log.cbor, manifest.cbor and a signed attestation.cbor. Returns the manifest.
     pub fn finalize(self, kp: &Keypair) -> Result<Manifest> {
         // log.cbor : a CBOR array of EventRecords
-        fs::write(self.dir.join("log.cbor"), crate::cbor::to_vec(&self.records)?)?;
+        fs::write(
+            self.dir.join("log.cbor"),
+            crate::cbor::to_vec(&self.records)?,
+        )?;
 
         // `self` is consumed here, so move (don't clone) the owned fields. The
         // borrowing reads (`records`, `record_hashes`) are evaluated first.

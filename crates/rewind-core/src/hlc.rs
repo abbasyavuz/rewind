@@ -18,7 +18,11 @@ pub struct Hlc {
 
 impl Hlc {
     pub fn zero(node: u64) -> Self {
-        Hlc { wall_ms: 0, counter: 0, node }
+        Hlc {
+            wall_ms: 0,
+            counter: 0,
+            node,
+        }
     }
 
     /// Local event: advance using a physical clock reading (ms since epoch).

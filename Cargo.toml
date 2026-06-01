@@ -11,7 +11,7 @@ exclude = ["crates/rewind-py"]
 [workspace.package]
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.82"  # Option::is_none_or (debug.rs); CI pins this
 license = "Apache-2.0"
 repository = "https://github.com/rewind-dev/rewind"
 authors = ["Rewind contributors"]
@@ -20,7 +20,7 @@ authors = ["Rewind contributors"]
 blake3 = "1.5"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
-ciborium = "0.2"          # CBOR (deterministic-encoding'e yakın; dCBOR kanonikleştirme TODO)
+ciborium = "0.2"          # CBOR (near-deterministic; full dCBOR canonicalization is a TODO)
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 thiserror = "1"

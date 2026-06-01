@@ -99,7 +99,11 @@ mod tests {
 
         // Overwrite the object's bytes (CID no longer matches).
         let raw_cid = Cid::of(b"original");
-        std::fs::write(tmp.join("objects").join(raw_cid.object_filename()), b"TAMPERED").unwrap();
+        std::fs::write(
+            tmp.join("objects").join(raw_cid.object_filename()),
+            b"TAMPERED",
+        )
+        .unwrap();
 
         let report = verify_artifact(&tmp, Some(&kp.verifying_key())).unwrap();
         assert!(!report.raw_objects_ok, "tamper must be detected");

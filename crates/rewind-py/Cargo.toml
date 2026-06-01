@@ -3,7 +3,7 @@ name = "rewind-py"
 description = "PyO3 bindings: the .rewind artifact engine for the Python capture SDK"
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.82"
 license = "Apache-2.0"
 
 [lib]

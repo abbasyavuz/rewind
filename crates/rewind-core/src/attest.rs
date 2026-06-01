@@ -17,11 +17,15 @@ pub struct Keypair {
 
 impl Keypair {
     pub fn generate() -> Self {
-        Keypair { signing: SigningKey::generate(&mut OsRng) }
+        Keypair {
+            signing: SigningKey::generate(&mut OsRng),
+        }
     }
 
     pub fn from_secret_bytes(bytes: &[u8; 32]) -> Self {
-        Keypair { signing: SigningKey::from_bytes(bytes) }
+        Keypair {
+            signing: SigningKey::from_bytes(bytes),
+        }
     }
 
     pub fn secret_bytes(&self) -> [u8; 32] {

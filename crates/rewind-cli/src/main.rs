@@ -34,6 +34,9 @@ enum Cmd {
         /// Path to a hex-encoded Ed25519 public key (omit to skip signature check).
         #[arg(long)]
         pubkey: Option<PathBuf>,
+        /// Emit the report as JSON (exit 0/1 still reflects pass/fail).
+        #[arg(long)]
+        json: bool,
     },
     /// Print a human summary of a .rewind artifact.
     Inspect {
@@ -43,9 +46,7 @@ enum Cmd {
         json: bool,
     },
     /// Generate an Ed25519 keypair: writes <out> (secret) and <out>.pub (public).
-    Keygen {
-        out: PathBuf,
-    },
+    Keygen { out: PathBuf },
     /// Write a tiny sample .rewind artifact for testing the verifier.
     Demo {
         /// Output directory for the artifact.
@@ -105,24 +106,52 @@ enum Cmd {
 
 fn main() -> Result<()> {
     match Cli::parse().cmd {
-        Cmd::Verify { path, pubkey } => cmd_verify(path, pubkey),
+        Cmd::Verify { path, pubkey, json } => cmd_verify(path, pubkey, json),
         Cmd::Inspect { path, json } => cmd_inspect(path, json),
         Cmd::Keygen { out } => cmd_keygen(out),
         Cmd::Demo { path } => cmd_demo(path),
-        Cmd::Log { path, json, oneline, kind, surface, from, to, limit } => {
-            debug::cmd_log(&path, json, oneline, kind, surface, from, to, limit)
-        }
-        Cmd::Show { path, selector, request, response, raw, meta } => {
-            debug::cmd_show(&path, &selector, request, response, raw, meta)
-        }
-        Cmd::Diff { a, b, stat, boundary, verify, pubkey_a, pubkey_b } => {
-            let code = debug::cmd_diff(&a, &b, stat, boundary, verify, pubkey_a.as_deref(), pubkey_b.as_deref())?;
+        Cmd::Log {
+            path,
+            json,
+            oneline,
+            kind,
+            surface,
+            from,
+            to,
+            limit,
+        } => debug::cmd_log(&path, json, oneline, kind, surface, from, to, limit),
+        Cmd::Show {
+            path,
+            selector,
+            request,
+            response,
+            raw,
+            meta,
+        } => debug::cmd_show(&path, &selector, request, response, raw, meta),
+        Cmd::Diff {
+            a,
+            b,
+            stat,
+            boundary,
+            verify,
+            pubkey_a,
+            pubkey_b,
+        } => {
+            let code = debug::cmd_diff(
+                &a,
+                &b,
+                stat,
+                boundary,
+                verify,
+                pubkey_a.as_deref(),
+                pubkey_b.as_deref(),
+            )?;
             std::process::exit(code);
         }
     }
 }
 
-fn cmd_verify(path: PathBuf, pubkey: Option<PathBuf>) -> Result<()> {
+fn cmd_verify(path: PathBuf, pubkey: Option<PathBuf>, json: bool) -> Result<()> {
     let vk = match pubkey {
         Some(p) => {
             let hexkey = std::fs::read_to_string(&p)
@@ -132,6 +161,22 @@ fn cmd_verify(path: PathBuf, pubkey: Option<PathBuf>) -> Result<()> {
         None => None,
     };
     let report = verify_artifact(&path, vk.as_ref()).context("verifying artifact")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "run_id": report.run_id, "event_count": report.event_count,
+                "chain_ok": report.chain_ok, "merkle_ok": report.merkle_ok,
+                "raw_objects_ok": report.raw_objects_ok, "redaction_auditable": report.redaction_auditable,
+                "cbids_unique": report.cbids_unique, "signature_ok": report.signature_ok, "ok": report.ok(),
+            })
+        );
+        if !report.ok() {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
 
     let mark = |b: bool| if b { "✓" } else { "✗" };
     println!("artifact : {}", path.display());
@@ -175,9 +220,18 @@ fn cmd_inspect(path: PathBuf, json: bool) -> Result<()> {
     }
     println!("run_id : {}", report.run_id);
     println!("events : {}", report.event_count);
-    println!("chain  : {}", if report.chain_ok { "intact" } else { "BROKEN" });
-    println!("merkle : {}", if report.merkle_ok { "ok" } else { "MISMATCH" });
-    println!("(run `rewind verify {} --pubkey <key.pub>` to check the signature)", path.display());
+    println!(
+        "chain  : {}",
+        if report.chain_ok { "intact" } else { "BROKEN" }
+    );
+    println!(
+        "merkle : {}",
+        if report.merkle_ok { "ok" } else { "MISMATCH" }
+    );
+    println!(
+        "(run `rewind verify {} --pubkey <key.pub>` to check the signature)",
+        path.display()
+    );
     Ok(())
 }
 
@@ -222,6 +276,10 @@ fn cmd_demo(path: PathBuf) -> Result<()> {
     let pubpath = path.join("demo-key.pub");
     std::fs::write(&pubpath, hex::encode(kp.verifying_key().to_bytes()))?;
     println!("wrote demo artifact: {}", path.display());
-    println!("verify it:\n  rewind verify {} --pubkey {}", path.display(), pubpath.display());
+    println!(
+        "verify it:\n  rewind verify {} --pubkey {}",
+        path.display(),
+        pubpath.display()
+    );
     Ok(())
 }

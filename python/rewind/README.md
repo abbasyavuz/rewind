@@ -28,7 +28,8 @@ with rewind.record("incident-123", out_dir="./incident-123.rewind"):
 | httpx transport chokepoint (OpenAI/Anthropic SDK) | Bedrock/Vertex/gateway (non-httpx) interceptors |
 | Causal boundary ids (anti-swap) | Concurrent-replay determinism (Spike-2) |
 | Deny-by-default nondeterminism guard + coverage report | Actual per-source shims (RNG/clock/vector store) |
-| Forensic commitment + auditable regex redaction | Presidio backend; streaming/SSE tee |
+| Forensic commitment + auditable regex redaction | Presidio backend |
+| **Streaming/SSE incremental tee** (TTFT preserved) | gzip-over-SSE via gateways (decoded best-effort) |
 | **PyO3 binding → real signed `.rewind`** (chain/Merkle/Ed25519 via rewind-core) | — |
 | **Deterministic replay** (match by causal id, serve from recording, FAIL LOUD on divergence/ambiguity) | — |
 | **Counterfactual fork** (deterministic prefix, swap one boundary's response, live-frontier past it) | Time-travel debugger UI; prompt-edit perturbations |

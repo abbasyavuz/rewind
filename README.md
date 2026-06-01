@@ -30,19 +30,22 @@ now." Rewind reproduced the incident offline, then we changed **one** model deci
 *what would have happened* — and proved the fix, as a git-like, independently verifiable diff:
 
 ```console
-$ rewind diff incident.rewind fixed.rewind --verify
-trust: incident.rewind VERIFIED ✓   fixed.rewind VERIFIED ✓
+$ rewind diff runs/support.rewind runs/support-fixed.rewind --verify \
+    --pubkey-a runs/support.rewind/run-key.pub --pubkey-b runs/support-fixed.rewind/run-key.pub
+trust: runs/support.rewind VERIFIED ✓   runs/support-fixed.rewind VERIFIED ✓
 prefix: 1 identical · diverged at seq 1 · forked at seq 1 · frontier: +2 −2
 
 @@ seq 1 (c718f8c10af5) — same request, response changed @@
-- "tool": "legacy_billing"
-+ "tool": "billing_v2"
+  {
+-   "tool": "legacy_billing"
++   "tool": "billing_v2"
+  }
 
-@@ frontier (the path not taken vs the counterfactual branch) @@
-- seq 2  ERROR: upstream timeout
-- seq 3  "Sorry, I can't check that right now."
-+ seq 2  refund $42.00 sent on 2026-05-28
-+ seq 3  "Your $42.00 refund was sent on 2026-05-28."
+@@ frontier (unaligned — the path not taken vs the counterfactual branch) @@
+- seq 2 POST -> {"out":"ERROR: upstream timeout"}
+- seq 3 POST -> {"answer":"Sorry, I can't check that right now."}
++ seq 2 POST -> {"out":"refund $42.00 sent on 2026-05-28"}
++ seq 3 POST -> {"answer":"Your $42.00 refund was sent on 2026-05-28."}
 ```
 
 The deterministic prefix is byte-identical; only the perturbed branch diverged. `exit 1` lets CI
@@ -59,22 +62,30 @@ det.verify_replay → seq 0: bitwise ✓   seq 1: bitwise ✓      # the recordi
 fork ×2 (inference=det) → frontier canon identical → counterfactual REPRODUCIBLE ✓
 ```
 
-Why this is the moat, not luck — the A/A noise floor of the *same* model (same input, N=10, temp=1.0):
+Why this is the moat, not luck — a representative A/A run of the *same* model (same input,
+N=10, temp=1.0; exact numbers vary run to run):
 
 | Setting | Noise floor | |
 |---|---|---|
 | self-hosted, **seed pinned by us** | **0.00** | bitwise-reproducible → divergence 100% attributable |
-| self-hosted, no seed | 0.60 | proves the determinism is **our control**, not the model |
-| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts, but [Spike-1](#evidence) measured 25–42% flips near the decision boundary |
+| self-hosted, no seed | ~0.6 | proves the determinism is **our control**, not the model |
+| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts; [Spike-1](#evidence) saw it flip on ambiguous inputs, and you can't pin it |
 
 ## Quick start
 
 ```bash
-# Rust core + CLI (the offline, static, no-Python verifier + debugger)
-cargo build --release && ./target/release/rewind --help
+make dev      # builds the Rust CLI + the PyO3 native module + the Python SDK into a venv
+make test     # cargo test + pytest
+```
 
-# Python capture SDK
-cd python/rewind && pip install -e ".[dev]"
+`import rewind` needs the native module (`rewind_native`), which is a separate maturin crate —
+`pip install` **alone is not enough**, so use `make dev` (or, manually):
+
+```bash
+cargo build --release                                  # the `rewind` CLI
+python3 -m venv python/rewind/.venv && . python/rewind/.venv/bin/activate
+pip install -U maturin && pip install -e "python/rewind[dev,examples]"
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 maturin develop --release -m crates/rewind-py/Cargo.toml
 ```
 
 ```python
@@ -102,7 +113,7 @@ rewind log    incident.rewind                # timeline: one row per boundary (p
 rewind show   incident.rewind 3              # one boundary's request + response (by seq or causal-id)
 rewind diff   a.rewind b.rewind --verify     # prefix · divergence · frontier; refuses a tampered side
 rewind verify incident.rewind --pubkey k.pub # anyone can confirm integrity + signature, offline
-rewind log    x.rewind --json | jq …         # every command has a --json machine surface
+rewind log    x.rewind --json | jq …         # log, inspect, and verify have a --json surface
 ```
 
 The `rewind` binary is self-contained: it re-derives the BLAKE3 hash chain, the Merkle root, and the

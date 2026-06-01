@@ -15,10 +15,11 @@ Replay (deterministic re-execution, no network)::
         run_my_agent()          # each boundary served from the recording
     print(rep.report())         # {recorded, served, unused}
 
-Status: v0. Capture + deterministic replay (match by causal boundary id, FAIL LOUD
-on divergence/ambiguity) are wired; the signed `.rewind` is produced by rewind-core
-(PyO3). Counterfactual fork and the time-travel debugger UI build on replay in
-Phase-3 (see docs/rewind-technical-plan.md).
+Status: v0. Capture, deterministic replay (match by causal boundary id, FAIL LOUD on
+divergence/ambiguity), counterfactual fork, and the `Deterministic` (bitwise) profile
+are all wired; the signed `.rewind` is produced by rewind-core (PyO3). The only
+deferred piece is an interactive time-travel debugger UI/TUI (v0.5; today the Rust
+`rewind log|show|diff` CLI covers it). See docs/rewind-technical-plan.md.
 """
 
 from __future__ import annotations

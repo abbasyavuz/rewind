@@ -6,11 +6,13 @@ Each boundary is fed to `rewind_native` (PyO3 -> rewind-core), which owns
 CID/HLC/causal-id/chain/Merkle/signing — so the artifact this produces is a real,
 signed, offline-verifiable `.rewind`.
 
+Streaming (SSE) responses are teed incrementally (TTFT preserved); non-streaming
+responses are buffered + decoded.
+
 HONEST SCOPE (technical plan §1-A, §3.7): Bedrock (boto3/urllib3), Vertex/Gemini
 gRPC, and gateways (LiteLLM/Portkey) do NOT go through httpx — explicit fast-follow;
-gateway runs get `CaptureSurface.GATEWAY` (auto-INDETERMINATE for the envelope).
-Streaming/SSE incremental tee, and moving redaction off this synchronous path, are
-`# TODO(phase-1)`.
+gateway runs would get `CaptureSurface.GATEWAY` (auto-INDETERMINATE for the envelope).
+Moving redaction off the synchronous path is `# TODO(phase-1)`.
 """
 
 from __future__ import annotations
@@ -157,6 +159,15 @@ def _record_streamed(
     response: httpx.Response,
     body: bytes,
 ) -> None:
+    # We teed the RAW stream (so the consumer's content-decoder still works). If a
+    # gateway/CDN gzipped the SSE, decode our buffer so the recording is replayable.
+    if "gzip" in response.headers.get("content-encoding", "").lower():
+        import gzip
+
+        try:
+            body = gzip.decompress(body)
+        except Exception:
+            pass  # truncated/partial stream — keep the raw bytes
     recorder.record_boundary(
         kind=BoundaryKind.MODEL_CALL,
         surface=CaptureSurface.SDK_HTTPX,

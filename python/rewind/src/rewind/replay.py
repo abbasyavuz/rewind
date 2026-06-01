@@ -46,9 +46,10 @@ def _recorded_response(objects: Path, event: dict, request: httpx.Request) -> ht
     resp = json.loads(raw)["response"]
     body = resp["body"]
     # Detect a recorded SSE stream so a streaming consumer (e.g. openai stream=True)
-    # parses it; otherwise serve as JSON. v0: bodies are text (LLM APIs are JSON/SSE);
-    # binary-faithful replay is TODO(phase-3).
-    is_sse = body.lstrip()[:6] == "data: " or "\ndata: " in body[:256]
+    # parses it; otherwise serve as JSON. SSE always begins with an event line; JSON
+    # always begins with { or [ — so this start-anchored test has no false positives.
+    head = body.lstrip()[:8]
+    is_sse = head.startswith("data:") or head.startswith("event:")
     ctype = "text/event-stream" if is_sse else "application/json"
     return httpx.Response(
         status_code=resp["status"],

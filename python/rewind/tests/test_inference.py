@@ -22,9 +22,13 @@ def test_canon_hash_ignores_reasoning_and_logprobs() -> None:
     assert canon_hash(a) == canon_hash(b)
 
 
-def test_seed_injection() -> None:
+def test_seed_injection_forces_determinism() -> None:
     det = Deterministic(seed=7)
     out = json.loads(det._inject_seed(b'{"model":"m","messages":[]}'))
     assert out["seed"] == 7
     assert out["options"]["seed"] == 7
-    assert out["temperature"] == 0  # default pinned
+    assert out["temperature"] == 0
+    # FORCE even when the request already carries a temperature / its own options.seed.
+    out2 = json.loads(det._inject_seed(b'{"temperature":1.0,"options":{"seed":99},"messages":[]}'))
+    assert out2["temperature"] == 0
+    assert out2["seed"] == 7 and out2["options"]["seed"] == 7
