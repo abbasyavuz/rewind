@@ -1,98 +1,165 @@
 # Rewind
 
-**AI agent'ları için uçuş kayıt cihazı + time-travel debugger.**
+**A flight recorder and time-travel debugger for AI agents.**
 
-Bir agent'ın her non-deterministik sınırını (model sampling, tool çıktıları, retrieval, clock,
-RNG, HTTP) framework-altında yakalar; imzalı, content-addressed, Merkle-sıralı bir `.rewind`
-artefaktına yazar (herhangi bir üçüncü taraf **offline** doğrular); ve bir mühendisin run'ı
-**deterministik replay** edip zamanda gezinmesini ve **counterfactual fork** etmesini sağlar.
+When an agent misbehaves in production you usually can't reproduce it — the model is
+non-deterministic and the trail is gone. Rewind captures every non-deterministic boundary of an
+agent run (model calls, tool results, retrieval, clock, RNG, HTTP) into a **signed,
+content-addressed, offline-verifiable `.rewind` artifact**, then lets you **deterministically
+replay** it, **scrub the timeline**, and ask the counterfactual: *"what if this one boundary had
+returned X?"* — rewind, change one thing, and watch the trajectory diverge.
 
-> **Headline moat — kanıtlanabilir olan:** self-hosted/OSS modeller için **bitwise-exact replay**
-> + en-bolt-on-edilemez **imzalı doğrulanabilir artefakt**. Closed API'ler (Claude/GPT/Gemini)
-> için dürüst **best-effort divergence triage** — kalibre, birinci-sınıf `INDETERMINATE` etiketli,
-> **forensic sertifika olarak DEĞİL.**
+It hooks in **below the framework** (at the httpx transport), so it records the OpenAI SDK, the
+Anthropic SDK, LangGraph, CrewAI, … with **zero code changes**.
 
-Apache-2.0. OpenTelemetry tarzı open-core.
+> ### The moat — the provable part
+> For **self-hosted / OSS models** we control the sampler, so a boundary re-runs **bit-for-bit**
+> (noise floor = 0) and a fork's divergence is provably *your edit*, not sampling noise. For
+> **closed APIs** (Claude / GPT / Gemini) Rewind is honest: **best-effort divergence triage with a
+> first-class `INDETERMINATE`**, never a forensic certificate. We measured why — see [Evidence](#evidence).
+
+Apache-2.0 · open-core, OpenTelemetry-style · validated against a real model (`minimax/minimax-m3`)
+and a local OSS model (Ollama).
 
 ---
 
-## ⚠️ Statü: v0 iskeleti (pre-build)
+## See it work
 
-Bu repo **Hafta-0/Hafta-1 iskeletidir.** Henüz çalışan bir ürün değildir. Üç **existential risk**
-Hafta-1'de üç paralel **kill-spike** ile doğrulanır/öldürülür. Kod yazmadan önceki ilk iş —
-`spec/pivot-thresholds.md`'deki numerik pivot eşiklerini ratify etmek — bu iskeletin merkezindedir.
+A support agent picked a flaky tool, timed out, and told the customer "I can't check that right
+now." Rewind reproduced the incident offline, then we changed **one** model decision and asked
+*what would have happened* — and proved the fix, as a git-like, independently verifiable diff:
 
-Tam gerekçe ve yol haritası: [`docs/rewind-technical-plan.md`](docs/rewind-technical-plan.md).
+```console
+$ rewind diff incident.rewind fixed.rewind --verify
+trust: incident.rewind VERIFIED ✓   fixed.rewind VERIFIED ✓
+prefix: 1 identical · diverged at seq 1 · forked at seq 1 · frontier: +2 −2
 
-## Repo düzeni
+@@ seq 1 (c718f8c10af5) — same request, response changed @@
+- "tool": "legacy_billing"
++ "tool": "billing_v2"
 
-```
-.
-├── docs/                       # Fikir + finalize edilmiş teknik plan
-│   ├── rewind.md               #   fikir özeti (problem, moat, para, riskler)
-│   └── rewind-technical-plan.md#   ⭐ tam mimari + 13 haftalık yol haritası + 3 existential risk
-├── spec/                       # Format spec + önceden-kayıtlı kararlar
-│   ├── pivot-thresholds.md     #   ⭐ HAFTA-0: Spike-1 X/Y/Z pivot eşikleri (ratify edilecek)
-│   ├── rewind-format-v0.1-DRAFT.md  # .rewind artefakt formatı (DONDURULMAMIŞ)
-│   └── spikes/                 #   3 Hafta-1 kill-spike planı
-├── crates/                     # Rust: .rewind artefakt motoru + CLI
-│   ├── rewind-core/            #   BLAKE3 CID, hash-chained HLC log, dCBOR manifest, Ed25519, verify
-│   └── rewind-cli/             #   `rewind verify | inspect` (offline, statik binary)
-└── python/rewind/              # Python: capture SDK (httpx hook), context, guard, commitment
+@@ frontier (the path not taken vs the counterfactual branch) @@
+- seq 2  ERROR: upstream timeout
+- seq 3  "Sorry, I can't check that right now."
++ seq 2  refund $42.00 sent on 2026-05-28
++ seq 3  "Your $42.00 refund was sent on 2026-05-28."
 ```
 
-## Üç existential risk (teknik plan §0)
+The deterministic prefix is byte-identical; only the perturbed branch diverged. `exit 1` lets CI
+assert "this fix changed the trajectory."
 
-1. **Closed-API envelope kanıtlanabilirliği** — bir *identifiability* problemi (örneklem değil).
-2. **Concurrent/multi-agent deterministik replay** — sessiz/kendinden-emin-yanlış başarısızlık.
-3. **Ticari talep** — kill-spike ile LOI'ye gate'lenir.
+## The bitwise moat, automated
 
-## Hızlı başlangıç (geliştirici)
+On a model you self-host, Rewind makes replay/fork **reproducible by construction** — a first-class
+`Deterministic` profile pins the sampler:
+
+```console
+$ python examples/deterministic_oss.py        # Ollama llama3.2:3b, no GPU
+det.verify_replay → seq 0: bitwise ✓   seq 1: bitwise ✓      # the recording replays bit-for-bit
+fork ×2 (inference=det) → frontier canon identical → counterfactual REPRODUCIBLE ✓
+```
+
+Why this is the moat, not luck — the A/A noise floor of the *same* model (same input, N=10, temp=1.0):
+
+| Setting | Noise floor | |
+|---|---|---|
+| self-hosted, **seed pinned by us** | **0.00** | bitwise-reproducible → divergence 100% attributable |
+| self-hosted, no seed | 0.60 | proves the determinism is **our control**, not the model |
+| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts, but [Spike-1](#evidence) measured 25–42% flips near the decision boundary |
+
+## Quick start
 
 ```bash
-# Rust core + CLI (offline verifier)
-cargo build --release
-./target/release/rewind --help
+# Rust core + CLI (the offline, static, no-Python verifier + debugger)
+cargo build --release && ./target/release/rewind --help
 
-# Python capture SDK (editable install)
+# Python capture SDK
 cd python/rewind && pip install -e ".[dev]"
 ```
 
 ```python
-import rewind, httpx
-with rewind.record("incident", out_dir="./incident.rewind"):
-    run_my_agent()                       # boundaries captured below the framework
+import rewind
 
-# Deterministic replay (no network): each boundary served from the recording.
+with rewind.record("incident", out_dir="./incident.rewind"):
+    run_my_agent()                      # OpenAI/Anthropic/LangGraph/… captured below the framework
+
+# Deterministic replay — no network, no key: each boundary served from the recording.
 with rewind.replay("./incident.rewind") as rep:
     run_my_agent()
-    print(rep.report())                  # {recorded, served, unused}; diverge -> FAIL LOUD
+    print(rep.report())                 # {recorded, served, unused}; divergence/ambiguity → FAIL LOUD
 
-# Counterfactual fork: "what if boundary 0 had returned X?" — rewind, change one
-# thing, watch the trajectory diverge. The deterministic prefix is identical.
-with rewind.fork("./incident.rewind", at=0, swap_response=(200, b'{"tool":"billing_db"}'),
-                 on_frontier=lambda req, body: httpx.Response(200, content=b'{"out":"fixed"}')) as fk:
+# Counterfactual fork — change one boundary, watch the trajectory diverge.
+with rewind.fork("./incident.rewind", at=1, swap_response=(200, b'{"tool":"billing_v2"}'),
+                 inference=rewind.Deterministic(seed=42),   # the branch re-runs the OSS model, reproducibly
+                 record_to="./fixed.rewind"):
     run_my_agent()
-    print(fk.report())                   # {forked, fork_seq, frontier_hits, ...}
 ```
 
-### Time-travel debugger (Rust CLI — offline, no Python)
+## Time-travel debugger (Rust CLI — offline, no Python)
 
 ```bash
-rewind log    incident.rewind                 # timeline: one row per boundary (pipe to `less -R`)
-rewind show   incident.rewind 3               # one boundary's request+response (by seq or causal-id)
-rewind diff   incident.rewind fixed.rewind    # prefix · divergence · frontier  (exit 1 if diverged)
-rewind diff   incident.rewind fixed.rewind --verify   # refuses to diff a tampered side
-rewind log    x.rewind --json | jq …          # every command has a --json machine surface
+rewind log    incident.rewind                # timeline: one row per boundary (pipe to `less -R`)
+rewind show   incident.rewind 3              # one boundary's request + response (by seq or causal-id)
+rewind diff   a.rewind b.rewind --verify     # prefix · divergence · frontier; refuses a tampered side
+rewind verify incident.rewind --pubkey k.pub # anyone can confirm integrity + signature, offline
+rewind log    x.rewind --json | jq …         # every command has a --json machine surface
 ```
 
-`fork(..., record_to="fixed.rewind")` writes the counterfactual to a second signed artifact, so
-`rewind diff` shows — as a git-like, independently verifiable diff — that one changed boundary
-turned the failure into the fix.
+The `rewind` binary is self-contained: it re-derives the BLAKE3 hash chain, the Merkle root, and the
+Ed25519 signature with no trust in us — so a `.rewind` is independently verifiable and tamper-evident.
 
-> Not: v0. **Capture + deterministik replay + counterfactual fork + time-travel debugger CLI çalışıyor.**
-> İnteraktif TUI v0.5 (teknik plan; v0'da `rewind log | less`). `// TODO(phase-N)` işaretleri fazlara bağlanır.
+## Examples
 
-## Lisans
+Each runs a **real** agent (`minimax/minimax-m3` via OpenRouter, or local `llama3.2:3b` via Ollama),
+captured with zero SDK changes. See [`examples/`](examples/):
+
+- [`openrouter_agent.py`](examples/openrouter_agent.py) — record · replay · fork (canned **or `--live`** frontier).
+- [`tooluse_agent.py`](examples/tooluse_agent.py) — a multi-step tool-use agent; the full reasoning + tool trail is captured and reproduced offline.
+- [`deterministic_oss.py`](examples/deterministic_oss.py) — the bitwise tier: `verify_replay` + reproducible fork.
+
+## Evidence
+
+We don't just claim the moat — we [pre-registered thresholds](spec/pivot-thresholds.md) and measured:
+
+- **[Spike-1: divergence-envelope](spec/spikes/spike-1-findings.md)** — closed-API single-sample
+  attribution is easy when the model is confident and **poor/unmeasurable near the decision boundary**
+  (the identifiability wall). This is *why* the headline moat is OSS-bitwise, not closed-API forensics.
+- **[Bitwise-OSS replay](spec/spikes/spike-oss-bitwise-findings.md)** — on a self-hosted model the
+  noise floor is 0 *because we hold the seed*, so fork divergence is provably edit-caused.
+
+## How it works
+
+```
+your agent ──(httpx transport hook)──► capture ──► rewind-core (Rust): BLAKE3 CID · hash-chained
+                                          │           HLC log · Merkle · Ed25519 ─► signed .rewind
+   replay / fork  ◄── causal-id match (blake3(parent ‖ request)) · FAIL LOUD on divergence/ambiguity
+   rewind CLI     ◄── log · show · diff · verify   (static binary, offline, no Python)
+```
+
+Causal boundary ids chain on lineage + request content (no clock), so they reproduce on replay; the
+parent advances each step so sequential repeats stay distinct and only true concurrent collisions are
+refused. Full architecture + roadmap: [`docs/rewind-technical-plan.md`](docs/rewind-technical-plan.md).
+
+## Status
+
+**v0, and the core loop works end to end, validated against real models.** `cargo test` + `pytest`
+green; `record → replay → fork → debugger CLI` all run offline and cross-tool verify.
+
+Honest scope: closed-API triage is provisional (pilot on `minimax-m3`; the binding Claude measurement
+is pending). The local bitwise tier is *canonical*-bitwise + signed; full **raw-byte** batch-invariance
+under production batching is the GPU/vLLM tier. Streaming is supported; gateway/Bedrock and
+MCP-over-stdio interceptors are fast-follows. `# TODO(phase-N)` markers map to the technical plan.
+
+## Repo layout
+
+```
+docs/      idea brief + the finalized technical plan (architecture, roadmap, risks)
+spec/      .rewind format, pre-registered pivot thresholds, spike plans + findings
+crates/    rewind-core (the .rewind engine) · rewind-cli (verify · log · show · diff)
+python/    the capture / replay / fork / Deterministic SDK
+examples/  real agents (OpenRouter + Ollama); spikes/  the measurement harnesses
+```
+
+## License
 
 [Apache-2.0](LICENSE).
