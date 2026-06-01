@@ -32,5 +32,6 @@ with rewind.record("incident-123", out_dir="./incident-123.rewind"):
 | **PyO3 binding → real signed `.rewind`** (chain/Merkle/Ed25519 via rewind-core) | — |
 | **Deterministic replay** (match by causal id, serve from recording, FAIL LOUD on divergence/ambiguity) | — |
 | **Counterfactual fork** (deterministic prefix, swap one boundary's response, live-frontier past it) | Time-travel debugger UI; prompt-edit perturbations |
+| **Deterministic inference profile** (`Deterministic`: `verify_replay` proves a recording replays bit-for-bit; `fork(inference=…)` auto-runs the divergent branch with a pinned seed → reproducible counterfactual — the bitwise moat) | GPU/vLLM raw-byte batch-invariance |
 
 See [`../../docs/rewind-technical-plan.md`](../../docs/rewind-technical-plan.md).

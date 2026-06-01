@@ -33,6 +33,7 @@ from . import context
 from .capture import Recorder, install, uninstall
 from .events import ZERO_CID, BoundaryKind, CaptureSurface, EventRecord
 from .guard import CoverageReport, Guard, UncoveredNondeterminismError
+from .inference import Deterministic
 from .replay import Forker, Replayer, ReplayMismatch
 
 __version__ = "0.0.1"
@@ -46,6 +47,7 @@ __all__ = [
     "Recorder",
     "Replayer",
     "Forker",
+    "Deterministic",
     "ReplayMismatch",
     "BoundaryKind",
     "CaptureSurface",
@@ -96,6 +98,7 @@ def fork(
     at: int,
     swap_response: tuple[int, bytes],
     on_frontier: Callable[[object, bytes], object] | None = None,
+    inference: Deterministic | None = None,
     record_to: str | os.PathLike[str] | None = None,
     run_id: str | None = None,
 ) -> Iterator[Forker]:
@@ -104,8 +107,12 @@ def fork(
     requests not in the recording go to `on_frontier` (a live call / canned response
     / None to FAIL LOUD). The "what if this boundary had returned X?" question.
 
-    With `record_to`, the counterfactual run is written to a second signed `.rewind`
-    so `rewind diff <original> <record_to>` shows the divergence."""
+    Pass `inference=Deterministic(...)` to auto-run the divergent branch against a
+    self-hosted model with a pinned seed — the counterfactual becomes reproducible
+    and its divergence is provably your edit (the bitwise moat). With `record_to`,
+    the counterfactual is written to a second signed `.rewind` for `rewind diff`."""
+    if on_frontier is None and inference is not None:
+        on_frontier = lambda req, body: inference.reissue(req, body, inject=True)  # noqa: E731
     install()
     forker = Forker(
         str(artifact_dir),
