@@ -11,6 +11,7 @@ use crate::log::EventRecord;
 use crate::manifest::Manifest;
 use crate::merkle::merkle_root;
 use ed25519_dalek::VerifyingKey;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -28,6 +29,8 @@ pub struct VerifyReport {
     pub raw_objects_ok: bool,
     /// Every redacted record also carries a redaction transform descriptor.
     pub redaction_auditable: bool,
+    /// No two boundaries share a causal id (a collision = un-replayable concurrent siblings).
+    pub cbids_unique: bool,
 }
 
 impl VerifyReport {
@@ -37,6 +40,7 @@ impl VerifyReport {
             && self.merkle_ok
             && self.raw_objects_ok
             && self.redaction_auditable
+            && self.cbids_unique
             && self.signature_ok.unwrap_or(true)
     }
 }
@@ -56,13 +60,18 @@ pub fn verify_artifact(dir: &Path, trusted: Option<&VerifyingKey>) -> Result<Ver
     let attestation = Attestation::from_cbor(&read(&dir.join("attestation.cbor"))?)?;
     let records: Vec<EventRecord> = crate::cbor::from_slice(&read(&dir.join("log.cbor"))?)?;
 
-    // 1. Walk the hash chain.
+    // 1. Walk the hash chain (and check causal-id uniqueness).
     let mut prev = Cid::ZERO;
     let mut hashes = Vec::with_capacity(records.len());
     let mut chain_ok = true;
+    let mut seen_cbids = HashSet::with_capacity(records.len());
+    let mut cbids_unique = true;
     for (i, rec) in records.iter().enumerate() {
         if rec.prev_hash != prev || rec.seq != i as u64 {
             chain_ok = false;
+        }
+        if !seen_cbids.insert(rec.causal_boundary_id) {
+            cbids_unique = false;
         }
         let h = rec.record_hash()?;
         hashes.push(h);
@@ -121,5 +130,6 @@ pub fn verify_artifact(dir: &Path, trusted: Option<&VerifyingKey>) -> Result<Ver
         signature_ok,
         raw_objects_ok,
         redaction_auditable,
+        cbids_unique,
     })
 }

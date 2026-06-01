@@ -185,6 +185,7 @@ fn verify(py: Python<'_>, dir: String, pubkey_hex: Option<String>) -> PyResult<P
     d.set_item("merkle_ok", r.merkle_ok)?;
     d.set_item("raw_objects_ok", r.raw_objects_ok)?;
     d.set_item("redaction_auditable", r.redaction_auditable)?;
+    d.set_item("cbids_unique", r.cbids_unique)?;
     d.set_item("signature_ok", r.signature_ok)?; // Option<bool> -> None | bool
     d.set_item("ok", overall)?;
     Ok(d.into())

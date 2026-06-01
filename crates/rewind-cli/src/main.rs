@@ -141,6 +141,7 @@ fn cmd_verify(path: PathBuf, pubkey: Option<PathBuf>) -> Result<()> {
     println!("[{}] merkle root", mark(report.merkle_ok));
     println!("[{}] raw objects", mark(report.raw_objects_ok));
     println!("[{}] redaction auditable", mark(report.redaction_auditable));
+    println!("[{}] causal ids unique", mark(report.cbids_unique));
     match report.signature_ok {
         Some(b) => println!("[{}] signature", mark(b)),
         None => println!("[-] signature (no pubkey supplied; integrity-only)"),
@@ -166,6 +167,7 @@ fn cmd_inspect(path: PathBuf, json: bool) -> Result<()> {
             "merkle_ok": report.merkle_ok,
             "raw_objects_ok": report.raw_objects_ok,
             "redaction_auditable": report.redaction_auditable,
+            "cbids_unique": report.cbids_unique,
             "signature_ok": report.signature_ok,
         });
         println!("{v}");

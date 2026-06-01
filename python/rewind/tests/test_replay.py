@@ -67,3 +67,22 @@ def test_replay_ambiguity_fails_loud(tmp_path) -> None:
         rctx.set_parent_boundary(ZERO_CID)
         with pytest.raises(rewind.ReplayMismatch, match="ambiguous"):
             rep.serve(req, req.content)
+
+
+def test_record_rejects_colliding_concurrent_siblings(tmp_path) -> None:
+    """rewind-core refuses to SIGN an un-replayable recording: two concurrent
+    siblings sharing a parent + request collide on the causal id -> FAIL LOUD at
+    record time, before anything is signed."""
+    out = str(tmp_path / "c.rewind")
+    req = httpx.Request("POST", "https://x.test/y", json={"step": "ask"})
+    with pytest.raises(Exception, match="concurrent siblings|duplicate causal"):
+        with rewind.record("c", out_dir=out) as rec:
+            rec.record_boundary(
+                kind=rewind.BoundaryKind.MODEL_CALL, surface=rewind.CaptureSurface.SDK_HTTPX,
+                request=req, req_body=req.content, resp_status=200, resp_body=b"{}", meta={},
+            )
+            rctx.set_parent_boundary(ZERO_CID)  # a sibling sharing the root parent
+            rec.record_boundary(
+                kind=rewind.BoundaryKind.MODEL_CALL, surface=rewind.CaptureSurface.SDK_HTTPX,
+                request=req, req_body=req.content, resp_status=200, resp_body=b"{}", meta={},
+            )

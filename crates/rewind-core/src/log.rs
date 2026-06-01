@@ -45,7 +45,8 @@ pub struct EventRecord {
     pub hlc: Hlc,
     /// `record_hash` of the preceding event (Cid::ZERO for the first).
     pub prev_hash: Cid,
-    /// blake3(parent_boundary_id || spawn_hlc_bytes || semantic_request_hash).
+    /// blake3(parent_boundary_id || semantic_request_hash) — NO clock, so it
+    /// reproduces on replay. See `causal_boundary_id()`. The HLC lives in `hlc`.
     pub causal_boundary_id: Cid,
     pub kind: BoundaryKind,
     pub capture_surface: CaptureSurface,

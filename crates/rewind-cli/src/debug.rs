@@ -158,6 +158,10 @@ pub fn cmd_log(
 // ---------- rewind show ----------
 
 fn resolve<'a>(records: &'a [EventRecord], selector: &str) -> Result<&'a EventRecord> {
+    let selector = selector.trim();
+    if selector.is_empty() {
+        bail!("empty boundary selector — pass a seq or a causal-id prefix");
+    }
     if let Ok(seq) = selector.parse::<u64>() {
         return records
             .iter()
@@ -301,12 +305,13 @@ pub fn cmd_diff(
     let mut prefix = 0;
     let mut changed: Vec<usize> = Vec::new();
     while i < ra.len() && i < rb.len() && ra[i].causal_boundary_id == rb[i].causal_boundary_id {
-        let da = decode(&oa, &ra[i]);
-        let db = decode(&ob, &rb[i]);
-        if da.resp_body == db.resp_body {
+        // Decide on the FORENSIC committed bytes (raw_cid), not the lossy decoded
+        // body — so a status-only swap, a request-field change, or a non-decodable
+        // blob all count as a divergence. decode() is only for human rendering.
+        if ra[i].raw_cid == rb[i].raw_cid {
             prefix += 1;
         } else {
-            changed.push(i); // same request id, different response = the swap/divergence
+            changed.push(i); // same request id, different committed bytes = the swap
         }
         i += 1;
     }
@@ -338,6 +343,10 @@ pub fn cmd_diff(
             println!("\n@@ seq {} ({}) — same request, response changed @@", ra[c].seq, &cbid(&ra[c])[..12]);
             let da = decode(&oa, &ra[c]);
             let db = decode(&ob, &rb[c]);
+            if da.status != db.status {
+                println!("- status {}", da.status.map(|s| s.to_string()).unwrap_or_else(|| "?".into()));
+                println!("+ status {}", db.status.map(|s| s.to_string()).unwrap_or_else(|| "?".into()));
+            }
             for line in body_diff(da.resp_body.as_deref().unwrap_or(""), db.resp_body.as_deref().unwrap_or("")) {
                 println!("{line}");
             }

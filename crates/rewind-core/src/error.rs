@@ -20,6 +20,9 @@ pub enum Error {
     #[error("signature error: {0}")]
     Signature(String),
 
+    #[error("duplicate causal boundary id at seq {seq}: two boundaries share a parent and request (concurrent siblings) — the run is not deterministically replayable")]
+    AmbiguousBoundary { seq: u64 },
+
     #[error("malformed artifact: {0}")]
     Malformed(String),
 }

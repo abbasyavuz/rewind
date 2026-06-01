@@ -108,3 +108,24 @@ def test_fork_record_to_writes_verifiable_diffable_artifact(tmp_path) -> None:
     fork_ids = [e["causal_boundary_id"] for e in rewind_native.load_events(forked)]
     assert fork_ids[0] == base_ids[0]
     assert fork_ids[1] != base_ids[1]  # diverged past the fork
+
+
+def test_fork_status_only_swap_is_a_real_divergence(tmp_path) -> None:
+    """A swap that changes ONLY the HTTP status (same body) is still a real
+    divergence: same causal id (request unchanged) but different committed bytes
+    (raw_cid). This is what `rewind diff` must align on, not the decoded body."""
+    base = str(tmp_path / "base.rewind")
+    forked = str(tmp_path / "forked.rewind")
+    _record_baseline(base)  # boundary 0: ask -> 200 {"tool":"search"}
+
+    # Same body the agent branches on -> it follows the SAME path (re-converges on
+    # boundary 1); only the status differs.
+    with rewind.fork(
+        base, at=0, swap_response=(503, b'{"tool":"search"}'), record_to=forked
+    ):
+        assert _agent(httpx.Client()) == "S"
+
+    base0 = next(e for e in rewind_native.load_events(base) if e["seq"] == 0)
+    fork0 = next(e for e in rewind_native.load_events(forked) if e["seq"] == 0)
+    assert fork0["causal_boundary_id"] == base0["causal_boundary_id"]  # request unchanged
+    assert fork0["raw_cid"] != base0["raw_cid"]  # committed bytes (status) differ

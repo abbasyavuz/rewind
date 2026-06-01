@@ -5,12 +5,12 @@
 
 use crate::attest::{Attestation, Keypair};
 use crate::cid::Cid;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::hlc::Hlc;
 use crate::log::{BoundaryKind, CaptureSurface, EventRecord};
 use crate::manifest::{Manifest, Profile, FORMAT_VERSION};
 use crate::merkle::merkle_root;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -27,6 +27,9 @@ pub struct ArtifactWriter {
     records: Vec<EventRecord>,
     record_hashes: Vec<Cid>,
     determinism: Option<BTreeMap<String, String>>,
+    /// Causal ids seen so far — a duplicate means concurrent siblings collided,
+    /// which is not deterministically replayable, so we refuse it at record time.
+    seen_cbids: HashSet<Cid>,
 }
 
 impl ArtifactWriter {
@@ -47,6 +50,7 @@ impl ArtifactWriter {
             records: Vec::new(),
             record_hashes: Vec::new(),
             determinism: None,
+            seen_cbids: HashSet::new(),
         })
     }
 
@@ -87,6 +91,12 @@ impl ArtifactWriter {
         }
         let semantic_cid = Cid::of(semantic_request);
         let cbid = crate::log::causal_boundary_id(parent, semantic_cid);
+
+        // FAIL LOUD on a colliding causal id (concurrent siblings) before signing
+        // anything — a recording that can't be replayed must never be produced.
+        if !self.seen_cbids.insert(cbid) {
+            return Err(Error::AmbiguousBoundary { seq: self.seq });
+        }
 
         let raw_cid = self.put_object(raw)?;
         let redacted_cid = match redacted {

@@ -58,9 +58,21 @@ class _Session:
     def __init__(self, artifact_dir: str) -> None:
         self.dir = Path(artifact_dir)
         self.objects = self.dir / "objects"
-        events = rewind_native.load_events(str(self.dir))
-        self._by_id: dict[str, dict] = {e["causal_boundary_id"]: e for e in events}
-        self._by_seq: dict[int, dict] = {e["seq"]: e for e in events}
+        self._events = rewind_native.load_events(str(self.dir))
+        # Don't silently collapse colliding causal ids into a dict — a collision is
+        # un-replayable concurrent siblings, and serving an arbitrary one would
+        # violate the FAIL-LOUD invariant. (rewind-core also refuses these at record
+        # time and verify flags them; this is defense-in-depth for old/tampered logs.)
+        self._by_id: dict[str, dict] = {}
+        for e in self._events:
+            key = e["causal_boundary_id"]
+            if key in self._by_id:
+                raise ReplayMismatch(
+                    f"un-replayable recording: boundaries seq {self._by_id[key]['seq']} and "
+                    f"{e['seq']} share causal id {key[:16]}… (concurrent siblings)."
+                )
+            self._by_id[key] = e
+        self._by_seq: dict[int, dict] = {e["seq"]: e for e in self._events}
         self._consumed: set[str] = set()
 
 
@@ -86,7 +98,7 @@ class Replayer(_Session):
         return _recorded_response(self.objects, event, request)
 
     def report(self) -> dict[str, int]:
-        total = len(self._by_id)
+        total = len(self._events)
         served = len(self._consumed)
         return {"recorded": total, "served": served, "unused": total - served}
 
@@ -208,7 +220,7 @@ class Forker(_Session):
 
     def report(self) -> dict:
         r = {
-            "recorded": len(self._by_id),
+            "recorded": len(self._events),
             "served": len(self._consumed),
             "forked": self._forked,
             "fork_seq": self._fork_seq,
