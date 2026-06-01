@@ -16,9 +16,10 @@ build/
 .mypy_cache/
 .ruff_cache/
 
-# Rewind artifacts (don't commit captured runs)
+# Rewind artifacts + experiment outputs (don't commit captured runs / measurements)
 *.rewind/
 *.rewind
+/runs/
 
 # Keys (NEVER commit signing keys)
 *.ed25519
