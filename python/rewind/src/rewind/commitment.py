@@ -49,17 +49,36 @@ def commit(raw: bytes, disclosure_key: bytes) -> Commitment:
     """
     text = raw.decode("utf-8", errors="replace")
 
+    # Collect ALL matches from ALL patterns against the ORIGINAL text first, so every
+    # (start, len) is an offset into the unmodified input. Substituting per-pattern in
+    # sequence (the old `pat.sub` loop) reported later patterns' offsets relative to an
+    # already-shortened string — the recorded spans no longer mapped to the original
+    # bytes, breaking the audit trail and selective disclosure. (LB-4)
+    matches: list[tuple[int, int, str, str]] = []  # (start, end, kind, original)
+    for kind, pat in _PATTERNS.items():
+        for m in pat.finditer(text):
+            matches.append((m.start(), m.end(), kind, m.group(0)))
+
+    # Resolve overlaps deterministically: sort by start, then by widest match; keep the
+    # first and skip any later match that overlaps an already-kept span (e.g. digits a
+    # `card` match shares with a `bearer`/`api_key` match).
+    matches.sort(key=lambda t: (t[0], -(t[1] - t[0])))
+    kept: list[tuple[int, int, str, str]] = []
+    last_end = -1
+    for start, end, kind, original in matches:
+        if start >= last_end:
+            kept.append((start, end, kind, original))
+            last_end = end
+
     transform: list[dict[str, object]] = []
     field_hmacs: dict[str, str] = {}
+    for start, end, kind, original in kept:
+        field_hmacs[f"{kind}@{start}"] = _hmac(original.encode(), disclosure_key)
+        transform.append({"kind": kind, "start": start, "len": end - start})
 
-    def _sub(kind: str, m: re.Match[str]) -> str:
-        original = m.group(0)
-        field_hmacs[f"{kind}@{m.start()}"] = _hmac(original.encode(), disclosure_key)
-        transform.append({"kind": kind, "start": m.start(), "len": len(original)})
-        return f"⟦{kind}⟧"
-
-    for kind, pat in _PATTERNS.items():
-        text = pat.sub(lambda m, k=kind: _sub(k, m), text)
+    # Substitute back-to-front so earlier offsets remain valid as we mutate the string.
+    for start, end, kind, _original in sorted(kept, key=lambda t: t[0], reverse=True):
+        text = text[:start] + f"⟦{kind}⟧" + text[end:]
 
     redacted = text.encode("utf-8")
     transform_desc = json.dumps(

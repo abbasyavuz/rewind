@@ -25,6 +25,7 @@ class UncoveredNondeterminismError(RuntimeError):
 class CoverageReport:
     covered: set[str] = field(default_factory=set)
     uncovered: set[str] = field(default_factory=set)
+    planned: set[str] = field(default_factory=set)
 
     def is_clean(self) -> bool:
         return not self.uncovered
@@ -33,17 +34,25 @@ class CoverageReport:
         lines = ["rewind capture-coverage:"]
         for s in sorted(self.covered):
             lines.append(f"  [✓] {s}")
+        for s in sorted(self.planned):
+            lines.append(f"  [~] {s}  (PLANNED — not yet shimmed; replay may diverge)")
         for s in sorted(self.uncovered):
             lines.append(f"  [✗] {s}  (UNCOVERED — replay may diverge)")
         return "\n".join(lines)
 
 
-# Sources we know how to shim (extended in Phase 1).
+# Sources we ACTUALLY intercept today.
 _COVERED: set[str] = {
-    "http.httpx",       # transport chokepoint (capture.py)
-    "time.time",        # TODO(phase-1): wire actual shim
-    "random.Random",    # TODO(phase-1)
-    "uuid.uuid4",       # TODO(phase-1)
+    "http.httpx",       # transport chokepoint (capture.py) — the only live shim in v0
+}
+
+# Sources we intend to shim but have NOT wired yet (`# TODO(phase-1)`). These are
+# reported as PLANNED, never as covered — claiming coverage we don't deliver would
+# let a run silently diverge on replay (e.g. an agent calling uuid4()/time.time()).
+_PLANNED: set[str] = {
+    "time.time",
+    "random.Random",
+    "uuid.uuid4",
 }
 
 
@@ -53,9 +62,19 @@ class Guard:
         self.report = CoverageReport()
 
     def assert_covered(self, source: str) -> None:
-        """Call at each interception point. Unknown source -> fail loud (strict) or record as uncovered."""
+        """Call at each interception point. A covered source is recorded and served.
+        A PLANNED source (known but not yet shimmed) and any unknown source cannot be
+        faithfully captured/replayed -> fail loud (strict) or record for the report."""
         if source in _COVERED:
             self.report.covered.add(source)
+            return
+        if source in _PLANNED:
+            self.report.planned.add(source)
+            if self.strict:
+                raise UncoveredNondeterminismError(
+                    f"nondeterminism source '{source}' is PLANNED but not yet shimmed (phase-1); "
+                    f"replay cannot be faithful. Disable strict, add a shim, or mark the boundary OpaqueTool."
+                )
             return
         self.report.uncovered.add(source)
         if self.strict:

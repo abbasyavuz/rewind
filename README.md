@@ -9,12 +9,16 @@ content-addressed, offline-verifiable `.rewind` artifact**, then lets you **dete
 replay** it, **scrub the timeline**, and ask the counterfactual: *"what if this one boundary had
 returned X?"* — rewind, change one thing, and watch the trajectory diverge.
 
-It hooks in **below the framework** (at the httpx transport), so it records the OpenAI SDK, the
-Anthropic SDK, LangGraph, CrewAI, … with **zero code changes**.
+It hooks in **below the framework** (at the httpx transport), so any client built on `httpx` is
+recorded with **zero code changes**. Verified end-to-end against the OpenAI and Anthropic SDKs;
+frameworks that delegate to those SDKs / `httpx` (LangGraph, CrewAI, …) are captured by the same
+hook — coverage we expect but don't yet ship an example for.
 
 > ### The moat — the provable part
-> For **self-hosted / OSS models** we control the sampler, so a boundary re-runs **bit-for-bit**
-> (noise floor = 0) and a fork's divergence is provably *your edit*, not sampling noise. For
+> For **self-hosted / OSS models** we control the sampler, so a boundary re-runs **canonical
+> bit-for-bit** — the response's semantic content, with volatile `id`/`created`/`usage`/`logprobs`
+> stripped (noise floor = 0); full raw-byte batch-invariance is the GPU/vLLM tier. A fork's
+> divergence is then provably *your edit*, not sampling noise. For
 > **closed APIs** (Claude / GPT / Gemini) Rewind is honest: **best-effort divergence triage with a
 > first-class `INDETERMINATE`**, never a forensic certificate. We measured why — see [Evidence](#evidence).
 
@@ -69,7 +73,7 @@ N=10, temp=1.0; exact numbers vary run to run):
 |---|---|---|
 | self-hosted, **seed pinned by us** | **0.00** | bitwise-reproducible → divergence 100% attributable |
 | self-hosted, no seed | ~0.6 | proves the determinism is **our control**, not the model |
-| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts; [Spike-1](#evidence) saw it flip on ambiguous inputs, and you can't pin it |
+| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts; [Spike-1](#evidence) returned **INCONCLUSIVE** (no near-boundary cases surfaced at temp=1.0) — the near-decision-boundary noise floor is *unmeasurable* here, and you can't pin it anyway |
 
 ## Quick start
 

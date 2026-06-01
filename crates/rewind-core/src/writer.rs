@@ -131,7 +131,9 @@ impl ArtifactWriter {
         self.records.push(rec);
         self.record_hashes.push(h);
         self.prev_hash = h;
-        self.seq += 1;
+        // saturating_add, matching finalize's saturating_sub — never wrap the seq
+        // counter (a u64 wrap would silently break the `seq == i` verify invariant). (CB-2)
+        self.seq = self.seq.saturating_add(1);
         Ok((h, cbid))
     }
 

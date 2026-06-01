@@ -119,6 +119,12 @@ pub fn verify_artifact(dir: &Path, trusted: Option<&VerifyingKey>) -> Result<Ver
         }
         if let Some(c) = &rec.redaction_transform_cid {
             check(c, &mut raw_objects_ok)?;
+            // The invariant is bidirectional: a transform descriptor without the
+            // redacted data it describes is an inconsistent (truncated/tampered)
+            // record, and must not pass as auditable. (LB-6)
+            if rec.redacted_cid.is_none() {
+                redaction_auditable = false;
+            }
         }
     }
 

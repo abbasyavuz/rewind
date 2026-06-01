@@ -8,8 +8,8 @@ silent (not FAIL-LOUD) way, or that leaks captured secrets, is a security issue 
 
 Please **do not open a public issue** for security reports. Instead, use GitHub's private
 [Security Advisories](https://docs.github.com/en/code-security/security-advisories) ("Report a
-vulnerability" on the repository's **Security** tab). If you can't, contact the maintainers privately
-(add a security contact email here before publishing).
+vulnerability" on the repository's **Security** tab) — this is our canonical, private channel and
+needs no email exchange to get started.
 
 We aim to acknowledge within a few days. Please include a reproduction and the affected commit.
 

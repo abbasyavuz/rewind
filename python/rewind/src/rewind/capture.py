@@ -148,6 +148,16 @@ def _tee(
     )
 
 
+def _stream_headers(response: httpx.Response) -> list[tuple[str, str]]:
+    """Headers for a teed STREAM. Unlike `_tee`, we hand the consumer the RAW stream
+    (its own decoder still runs), so `content-encoding` is KEPT. But `content-length`
+    is unreliable once we tee, and `transfer-encoding` is hop-by-hop — drop both so the
+    consumer doesn't mis-frame the body. Previously the stream path passed headers
+    through untouched, an inconsistency with `_tee`."""
+    drop = {"content-length", "transfer-encoding"}
+    return [(k, v) for k, v in response.headers.items() if k.lower() not in drop]
+
+
 def _is_streaming(response: httpx.Response) -> bool:
     return "text/event-stream" in response.headers.get("content-type", "").lower()
 
@@ -158,7 +168,13 @@ def _record_streamed(
     req_body: bytes,
     response: httpx.Response,
     body: bytes,
+    truncated: bool = False,
 ) -> None:
+    meta = {"host": request.url.host, "stream": "sse"}
+    if truncated:
+        # The consumer cancelled or the inner stream raised mid-flight: the buffer is
+        # a partial body. Mark it so replay doesn't serve it as a complete response. (CB-4)
+        meta["truncated"] = "true"
     # We teed the RAW stream (so the consumer's content-decoder still works). If a
     # gateway/CDN gzipped the SSE, decode our buffer so the recording is replayable.
     if "gzip" in response.headers.get("content-encoding", "").lower():
@@ -167,7 +183,10 @@ def _record_streamed(
         try:
             body = gzip.decompress(body)
         except Exception:
-            pass  # truncated/partial stream — keep the raw bytes
+            # A partial/corrupt gzip buffer cannot be decoded. Keeping the raw
+            # compressed bytes would have them silently mangled by utf-8 'replace' in
+            # frame_blob and served as garbage on replay. Mark it loudly instead. (LB-7)
+            meta["sse_decompression_failed"] = "true"
     recorder.record_boundary(
         kind=BoundaryKind.MODEL_CALL,
         surface=CaptureSurface.SDK_HTTPX,
@@ -175,7 +194,7 @@ def _record_streamed(
         req_body=req_body,
         resp_status=response.status_code,
         resp_body=body,
-        meta={"host": request.url.host, "stream": "sse"},
+        meta=meta,
     )
 
 
@@ -189,12 +208,18 @@ class _TeeSyncStream(httpx.SyncByteStream):
         self._on_done = on_done
         self._buf = bytearray()
         self._fired = False
+        self._complete = False
 
     def __iter__(self):
-        for chunk in self._inner:
-            self._buf.extend(chunk)
-            yield chunk
-        self._fire()
+        try:
+            for chunk in self._inner:
+                self._buf.extend(chunk)
+                yield chunk
+            self._complete = True
+        finally:
+            # Fire even if the inner stream raises mid-iteration — otherwise the
+            # partial body is silently dropped and no boundary is recorded. (CB-4)
+            self._fire()
 
     def close(self) -> None:
         try:
@@ -205,7 +230,7 @@ class _TeeSyncStream(httpx.SyncByteStream):
     def _fire(self) -> None:
         if not self._fired:
             self._fired = True
-            self._on_done(bytes(self._buf))
+            self._on_done(bytes(self._buf), not self._complete)
 
 
 class _TeeAsyncStream(httpx.AsyncByteStream):
@@ -214,12 +239,16 @@ class _TeeAsyncStream(httpx.AsyncByteStream):
         self._on_done = on_done
         self._buf = bytearray()
         self._fired = False
+        self._complete = False
 
     async def __aiter__(self):
-        async for chunk in self._inner:
-            self._buf.extend(chunk)
-            yield chunk
-        self._fire()
+        try:
+            async for chunk in self._inner:
+                self._buf.extend(chunk)
+                yield chunk
+            self._complete = True
+        finally:
+            self._fire()  # fire on mid-stream raise too (CB-4)
 
     async def aclose(self) -> None:
         try:
@@ -230,16 +259,16 @@ class _TeeAsyncStream(httpx.AsyncByteStream):
     def _fire(self) -> None:
         if not self._fired:
             self._fired = True
-            self._on_done(bytes(self._buf))
+            self._on_done(bytes(self._buf), not self._complete)
 
 
 def _tee_stream_sync(recorder, request, req_body, response):
     tee = _TeeSyncStream(
         response.stream,
-        lambda body: _record_streamed(recorder, request, req_body, response, body),
+        lambda body, truncated: _record_streamed(recorder, request, req_body, response, body, truncated),
     )
     return httpx.Response(
-        status_code=response.status_code, headers=response.headers,
+        status_code=response.status_code, headers=_stream_headers(response),
         stream=tee, request=request, extensions=response.extensions,
     )
 
@@ -247,10 +276,10 @@ def _tee_stream_sync(recorder, request, req_body, response):
 def _tee_stream_async(recorder, request, req_body, response):
     tee = _TeeAsyncStream(
         response.stream,
-        lambda body: _record_streamed(recorder, request, req_body, response, body),
+        lambda body, truncated: _record_streamed(recorder, request, req_body, response, body, truncated),
     )
     return httpx.Response(
-        status_code=response.status_code, headers=response.headers,
+        status_code=response.status_code, headers=_stream_headers(response),
         stream=tee, request=request, extensions=response.extensions,
     )
 

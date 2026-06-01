@@ -49,11 +49,17 @@ def test_streaming_tee_preserves_chunks_and_records_full_body() -> None:
         def close(self) -> None:
             pass
 
-    captured: dict[str, bytes] = {}
-    tee = _TeeSyncStream(_Inner(), lambda b: captured.__setitem__("body", b))
+    captured: dict[str, object] = {}
+
+    def _done(b: bytes, truncated: bool) -> None:
+        captured["body"] = b
+        captured["truncated"] = truncated
+
+    tee = _TeeSyncStream(_Inner(), _done)
     out = list(tee)  # the consumer sees every chunk, in order
     assert out == chunks
     assert captured["body"] == b"".join(chunks)  # full body committed once, at the end
+    assert captured["truncated"] is False  # clean stream -> not truncated
 
 
 def test_record_then_sign_then_verify_end_to_end(tmp_path) -> None:
