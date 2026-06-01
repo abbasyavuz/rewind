@@ -21,6 +21,14 @@ build/
 *.rewind
 /runs/
 
+# ...EXCEPT the two canned, PII-free headline-demo artifacts, so `rewind diff
+# runs/support.rewind runs/support-fixed.rewind --verify` works on a fresh clone.
+# (Re-include the dir, then the artifact subtrees; they hold only public keys.)
+!/runs/
+/runs/*
+!/runs/support.rewind/
+!/runs/support-fixed.rewind/
+
 # Keys (NEVER commit signing keys)
 *.ed25519
 *.key
