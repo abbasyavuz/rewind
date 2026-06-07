@@ -189,18 +189,6 @@ bağlanır.
 Kural basit: Rewind bir boundary veya determinism özelliğini ancak verifier ve testler onu zaten
 kanıtlıyorsa iddia eder. Geri kalan her şey açıkça phase'lenir.
 
-## Yayın öncesi kontrol listesi
-
-Depoyu public açmadan önce bunları bir kez kontrol edin:
-
-- Cargo metadata içindeki placeholder GitHub URL'sini (`rewind-dev/rewind`) gerçek repo URL'siyle değiştirin.
-- Yerel gate'leri yeniden çalıştırın: `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`,
-  `cargo test` ve `python -m pytest -q`.
-- `.env`, `.rewind` ve yerel run artifact'lerinin Git geçmişine girmediğini doğrulayın.
-- `SECURITY.md`, issue template'leri, PR template'i ve `CODE_OF_CONDUCT.md` dosyalarının gerçek repo
-  destek akışıyla uyumlu olduğunu kontrol edin.
-- Örnekleri ve README komutlarını temiz bir clone üzerinde akıl kontrolünden geçirin.
-
 ## Repo yerleşimi
 
 ```

@@ -56,7 +56,7 @@ def live_client() -> OpenAI:
     return OpenAI(
         api_key=API_KEY,
         base_url=BASE_URL,
-        default_headers={"HTTP-Referer": "https://github.com/rewind-dev/rewind", "X-Title": "Rewind"},
+        default_headers={"HTTP-Referer": "https://github.com/abbasyavuz/rewind", "X-Title": "Rewind"},
     )
 
 

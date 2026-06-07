@@ -369,7 +369,7 @@ def main() -> None:
     else:
         decision = "PROMISING (meets X and Y on this pilot — confirm on Claude before relying)"
     print(f"\n  >>> DECISION (PROVISIONAL): {decision}")
-    print(f"      vs ratified X(near-TPR@5%FPR)>=0.70, Y(indeterminate)<=0.40")
+    print("      vs ratified X(near-TPR@5%FPR)>=0.70, Y(indeterminate)<=0.40")
 
     out = ROOT / "runs" / "spike1-results.json"
     out.parent.mkdir(parents=True, exist_ok=True)

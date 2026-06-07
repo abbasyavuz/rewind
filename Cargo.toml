@@ -13,8 +13,8 @@ version = "0.0.1"
 edition = "2021"
 rust-version = "1.82"  # Option::is_none_or (debug.rs); CI pins this
 license = "Apache-2.0"
-repository = "https://github.com/rewind-dev/rewind"  # TODO: set to the real repo URL before publishing
-homepage = "https://github.com/rewind-dev/rewind"    # TODO: set to the real repo/site URL before publishing
+repository = "https://github.com/abbasyavuz/rewind"
+homepage = "https://github.com/abbasyavuz/rewind"
 authors = ["Rewind contributors"]
 
 [workspace.dependencies]
