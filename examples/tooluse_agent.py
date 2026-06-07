@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""A multi-step TOOL-USE agent on minimax/minimax-m3, captured by Rewind.
+"""A multi-step TOOL-USE agent, captured by Rewind.
 
-The model is given tools, decides which to call, we run them locally and feed the
-results back, and it loops until it answers — so each model call is a boundary and
-the timeline gets long. The whole tool-use conversation (tool_calls + results)
-lives inside the captured request/response bodies, so `rewind show` on a late
-boundary shows the full reasoning trail. Tools are deterministic, so replay is exact.
+Works against any OpenAI-compatible provider — pick yours in .env (see .env.example);
+Rewind ships no default model id. The model is given tools, decides which to call,
+we run them locally and feed the results back, and it loops until it answers — so
+each model call is a boundary and the timeline gets long. The whole tool-use
+conversation (tool_calls + results) lives inside the captured request/response
+bodies, so `rewind show` on a late boundary shows the full reasoning trail. Tools
+are deterministic, so replay is exact.
 
-    python examples/tooluse_agent.py record   # live minimax-m3 tool loop (needs key)
+    python examples/tooluse_agent.py record   # live tool loop against your provider (needs key + model)
     python examples/tooluse_agent.py replay     # reproduce offline (no key, no network)
 
 Inspect:
@@ -30,9 +32,20 @@ import rewind
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
-API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-MODEL = os.environ.get("OPENROUTER_MODEL", "minimax/minimax-m3")
-BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+def _env(*names: str, default: str = "") -> str:
+    """First non-empty value among env vars (new REWIND_* names, then the legacy
+    OPENROUTER_* ones for backward compatibility)."""
+    for name in names:
+        val = os.environ.get(name, "").strip()
+        if val:
+            return val
+    return default
+
+
+API_KEY = _env("REWIND_API_KEY", "OPENROUTER_API_KEY")
+MODEL = _env("REWIND_MODEL", "OPENROUTER_MODEL")  # no default — you pick the model
+BASE_URL = _env("REWIND_BASE_URL", "OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
 ARTIFACT = str(ROOT / "runs" / "tooluse.rewind")
 MAX_STEPS = 6
 
@@ -99,7 +112,9 @@ def run_agent(client: OpenAI, trace: bool) -> str:
 
 def make_client(live: bool) -> OpenAI:
     if live and not API_KEY:
-        sys.exit("Set OPENROUTER_API_KEY in .env first (see .env.example).")
+        sys.exit("Set REWIND_API_KEY in .env first (see .env.example).")
+    if live and not MODEL:
+        sys.exit("Set REWIND_MODEL in .env first — Rewind ships no default model (see .env.example).")
     return OpenAI(api_key=(API_KEY if live else "offline-replay"), base_url=BASE_URL)
 
 

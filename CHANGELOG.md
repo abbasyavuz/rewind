@@ -6,7 +6,8 @@ All notable changes to Rewind are documented here. The format follows
 ## [Unreleased]
 
 Initial development toward the first release. The core loop works end to end and is validated against
-real models (`minimax/minimax-m3` via OpenRouter; local `llama3.2:3b` via Ollama).
+real models (any OpenAI-compatible hosted provider you configure; a local OSS model via Ollama).
+Rewind is provider-agnostic and ships no default model id — you choose both in `.env`.
 
 ### Added
 - **`.rewind` artifact engine** (`rewind-core`): BLAKE3 content addressing, hash-chained HLC event log,
@@ -27,5 +28,5 @@ real models (`minimax/minimax-m3` via OpenRouter; local `llama3.2:3b` via Ollama
   measurement harnesses + findings.
 
 ### Notes
-- Closed-API divergence triage is provisional (pilot on `minimax-m3`; binding Claude measurement pending).
+- Closed-API divergence triage is provisional (piloted on one hosted model; binding Claude measurement pending).
 - The local bitwise tier is *canonical*-bitwise + signed; raw-byte batch-invariance is the GPU/vLLM tier.

@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Capture a REAL OpenRouter agent run with Rewind, then replay/fork it offline.
+"""Capture a REAL agent run with Rewind, then replay/fork it offline.
 
-OpenRouter is OpenAI-compatible, and the OpenAI SDK talks to it over httpx — which
-is exactly where Rewind's capture hook lives. So wrapping the agent in
-`rewind.record(...)` captures every real model call into a signed `.rewind`, with
-NO changes to the agent or the SDK.
+Rewind is provider-agnostic: it works with any OpenAI-compatible Chat Completions
+endpoint (OpenRouter, OpenAI, Together, Groq, a local Ollama, …). The OpenAI SDK
+talks to all of them over httpx — which is exactly where Rewind's capture hook
+lives. So wrapping the agent in `rewind.record(...)` captures every real model call
+into a signed `.rewind`, with NO changes to the agent or the SDK.
+
+You choose the provider and model via .env (see .env.example) — Rewind ships no
+default model id.
 
 Setup (once):
     cd python/rewind && pip install -e ".[dev,examples]"
-    # then paste your key into .env at the repo root:  OPENROUTER_API_KEY=sk-or-...
+    # then fill .env at the repo root: REWIND_API_KEY, REWIND_BASE_URL, REWIND_MODEL
 
 Run:
-    python examples/openrouter_agent.py record       # REAL minimax/minimax-m3 run (needs key)
-    python examples/openrouter_agent.py replay        # reproduce offline (no key, no network)
-    python examples/openrouter_agent.py fork           # counterfactual, canned frontier (offline)
-    python examples/openrouter_agent.py fork --live    # counterfactual, frontier asked LIVE to the model
+    python examples/openrouter_agent.py record         # REAL run against your provider (needs key + model)
+    python examples/openrouter_agent.py replay          # reproduce offline (no key, no network)
+    python examples/openrouter_agent.py fork             # counterfactual, canned frontier (offline)
+    python examples/openrouter_agent.py fork --live      # counterfactual, frontier asked LIVE to the model
 
 Inspect with the Rust CLI (offline, no Python):
     cargo run -q -p rewind-cli -- log  runs/support.rewind
@@ -40,9 +44,20 @@ import rewind
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
-API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-MODEL = os.environ.get("OPENROUTER_MODEL", "minimax/minimax-m3")
-BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+def _env(*names: str, default: str = "") -> str:
+    """First non-empty value among env vars (new REWIND_* names, then the legacy
+    OPENROUTER_* ones for backward compatibility)."""
+    for name in names:
+        val = os.environ.get(name, "").strip()
+        if val:
+            return val
+    return default
+
+
+API_KEY = _env("REWIND_API_KEY", "OPENROUTER_API_KEY")
+MODEL = _env("REWIND_MODEL", "OPENROUTER_MODEL")  # no default — you pick the model
+BASE_URL = _env("REWIND_BASE_URL", "OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
 
 ARTIFACT = str(ROOT / "runs" / "support.rewind")
 FORKED = str(ROOT / "runs" / "support-fixed.rewind")
@@ -52,10 +67,13 @@ TICKET = "Hi — I was charged twice for order #A-2291. Please refund the duplic
 
 def live_client() -> OpenAI:
     if not API_KEY:
-        sys.exit("Set OPENROUTER_API_KEY in .env first (see .env.example).")
+        sys.exit("Set REWIND_API_KEY in .env first (see .env.example).")
+    if not MODEL:
+        sys.exit("Set REWIND_MODEL in .env first — Rewind ships no default model (see .env.example).")
     return OpenAI(
         api_key=API_KEY,
         base_url=BASE_URL,
+        # Harmless attribution headers; OpenRouter reads them, other providers ignore them.
         default_headers={"HTTP-Referer": "https://github.com/abbasyavuz/rewind", "X-Title": "Rewind"},
     )
 
@@ -68,7 +86,7 @@ def offline_client() -> OpenAI:
 
 def live_frontier(request: httpx.Request, req_body: bytes) -> httpx.Response:
     """The counterfactual branch ACTUALLY asks the model: send a divergent post-fork
-    request live to OpenRouter and return the real response. We clear the rewind
+    request live to the provider and return the real response. We clear the rewind
     session first so this call hits the network instead of recursing into the fork.
     (The fork agent must use the real key so this request carries valid auth.)"""
     from rewind import context as rctx
@@ -131,7 +149,7 @@ def _with_content(template: dict, content: str) -> bytes:
 def cmd_record() -> None:
     client = live_client()
     Path(ARTIFACT).parent.mkdir(parents=True, exist_ok=True)
-    print(f"recording a real `{MODEL}` run via OpenRouter…\n")
+    print(f"recording a real `{MODEL}` run via {BASE_URL}…\n")
     with rewind.record("support-live", out_dir=ARTIFACT) as rec:
         category, reply = agent(client)
     print(f"  classified as : {category}")

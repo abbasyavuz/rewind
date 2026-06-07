@@ -24,8 +24,9 @@ hook — coverage we expect but don't yet ship an example for.
 > **closed APIs** (Claude / GPT / Gemini) Rewind is honest: **best-effort divergence triage with a
 > first-class `INDETERMINATE`**, never a forensic certificate. We measured why — see [Evidence](#evidence).
 
-Apache-2.0 · open-core, OpenTelemetry-style · validated against a real model (`minimax/minimax-m3`)
-and a local OSS model (Ollama).
+Apache-2.0 · open-core, OpenTelemetry-style · validated against a real hosted model
+(any OpenAI-compatible provider) and a local OSS model (Ollama). You bring the provider and model
+— Rewind ships no default model id.
 
 ---
 
@@ -75,7 +76,7 @@ N=10, temp=1.0; exact numbers vary run to run):
 |---|---|---|
 | self-hosted, **seed pinned by us** | **0.00** | bitwise-reproducible → divergence 100% attributable |
 | self-hosted, no seed | ~0.6 | proves the determinism is **our control**, not the model |
-| closed API (`minimax-m3`) | uncontrollable | stable on easy prompts; [Spike-1](#evidence) returned **INCONCLUSIVE** (no near-boundary cases surfaced at temp=1.0) — the near-decision-boundary noise floor is *unmeasurable* here, and you can't pin it anyway |
+| closed hosted API | uncontrollable | stable on easy prompts; [Spike-1](#evidence) returned **INCONCLUSIVE** (no near-boundary cases surfaced at temp=1.0) — the near-decision-boundary noise floor is *unmeasurable* here, and you can't pin it anyway |
 
 ## Quick start
 
@@ -127,8 +128,8 @@ Ed25519 signature with no trust in us — so a `.rewind` is independently verifi
 
 ## Examples
 
-Each runs a **real** agent (`minimax/minimax-m3` via OpenRouter, or local `llama3.2:3b` via Ollama),
-captured with zero SDK changes. See [`examples/`](examples/):
+Each runs a **real** agent against the provider and model you set in `.env` (any OpenAI-compatible
+hosted API, or a local OSS model via Ollama), captured with zero SDK changes. See [`examples/`](examples/):
 
 - [`openrouter_agent.py`](examples/openrouter_agent.py) — record · replay · fork (canned **or `--live`** frontier).
 - [`tooluse_agent.py`](examples/tooluse_agent.py) — a multi-step tool-use agent; the full reasoning + tool trail is captured and reproduced offline.
@@ -164,8 +165,8 @@ refused.
 **v0, and the core loop works end to end, validated against real models.** `cargo test` + `pytest`
 green; `record → replay → fork → debugger CLI` all run offline and cross-tool verify.
 
-Honest scope: closed-API triage is provisional (pilot on `minimax-m3`; the binding Claude measurement
-is pending). The local bitwise tier is *canonical*-bitwise + signed; full **raw-byte** batch-invariance
+Honest scope: closed-API triage is provisional (piloted on one hosted model; the binding Claude
+measurement is pending). The local bitwise tier is *canonical*-bitwise + signed; full **raw-byte** batch-invariance
 under production batching is the GPU/vLLM tier. Streaming is supported; gateway/Bedrock and
 MCP-over-stdio interceptors are fast-follows. `# TODO(phase-N)` markers map to the technical plan.
 

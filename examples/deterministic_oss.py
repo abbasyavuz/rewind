@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""The bitwise moat as a first-class feature (local, no GPU — Ollama llama3.2:3b).
+"""The bitwise moat as a first-class feature (local, no GPU — a self-hosted model).
+
+This is the OSS-bitwise tier, so it needs a model whose sampler you control (any
+seedable, self-hosted OpenAI-compatible server — Ollama is the easy default). Set
+your own model/endpoint via env; there is no default model id:
+
+    REWIND_OSS_MODEL     the local model id to run            (required)
+    REWIND_OSS_BASE_URL  its OpenAI-compatible base URL        (default: Ollama's)
 
 `rewind.Deterministic` makes replay/fork re-run a self-hosted model with a pinned
 seed, so:
@@ -9,13 +16,15 @@ seed, so:
      the counterfactual is REPRODUCIBLE — fork it twice and the frontier is identical.
      Its divergence from the recorded prefix is provably your edit, not noise.
 
-    ollama serve
-    python examples/deterministic_oss.py
+    ollama serve && ollama pull <your-model>
+    REWIND_OSS_MODEL=<your-model> python examples/deterministic_oss.py
 """
 
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 from openai import OpenAI
@@ -24,9 +33,13 @@ import rewind
 import rewind_native
 
 ROOT = Path(__file__).resolve().parents[1]
-OSS = "http://localhost:11434/v1"
-MODEL = "llama3.2:3b"
+OSS = os.environ.get("REWIND_OSS_BASE_URL", "").strip() or "http://localhost:11434/v1"
+MODEL = os.environ.get("REWIND_OSS_MODEL", "").strip()  # no default — you pick the local model
 TICKET = "I was charged twice this month and now I'm locked out of my account."
+
+if not MODEL:
+    sys.exit("Set REWIND_OSS_MODEL to a seedable self-hosted model, e.g. "
+             "REWIND_OSS_MODEL=llama3.2:3b python examples/deterministic_oss.py")
 
 det = rewind.Deterministic(seed=42)
 

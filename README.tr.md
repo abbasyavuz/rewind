@@ -26,8 +26,9 @@ olarak yayınlamıyoruz.
 > Rewind daha dürüst davranır: **ilk sınıf `INDETERMINATE` ile en iyi çaba divergence triage**
 > sunar; adli bir sertifika iddiasında bulunmaz. Nedenini ölçtük; bkz. [Evidence](#evidence).
 
-Apache-2.0 · open-core, OpenTelemetry tarzı · gerçek bir model (`minimax/minimax-m3`) ve yerel bir
-OSS model (Ollama) üzerinde doğrulandı.
+Apache-2.0 · open-core, OpenTelemetry tarzı · gerçek bir hosted model (herhangi bir OpenAI-uyumlu
+sağlayıcı) ve yerel bir OSS model (Ollama) üzerinde doğrulandı. Sağlayıcıyı ve modeli sen seçersin —
+Rewind hiçbir varsayılan model id'siyle gelmez.
 
 ---
 
@@ -78,7 +79,7 @@ N=10, temp=1.0; tam sayılar koşudan koşuya değişir):
 |---|---|---|
 | self-hosted, **seed bizim tarafımızdan sabitli** | **0.00** | bitwise yeniden üretilebilir -> divergence %100 atfedilebilir |
 | self-hosted, seed yok | ~0.6 | determinismin **bizim kontrolümüz** olduğunu gösterir |
-| kapalı API (`minimax-m3`) | kontrol edilemez | kolay promptlarda stabil; [Spike-1](#evidence) **INCONCLUSIVE** döndü (temp=1.0'da sınır-vaka çıkmadı) — karar sınırı yakınında noise floor burada ölçülemez ve zaten pin'lenemez |
+| kapalı hosted API | kontrol edilemez | kolay promptlarda stabil; [Spike-1](#evidence) **INCONCLUSIVE** döndü (temp=1.0'da sınır-vaka çıkmadı) — karar sınırı yakınında noise floor burada ölçülemez ve zaten pin'lenemez |
 
 ## Hızlı başlangıç
 
@@ -130,8 +131,8 @@ bize güvenmeden yeniden türetir; yani `.rewind` bağımsız doğrulanabilir ve
 
 ## Örnekler
 
-Her biri **gerçek** bir ajanı (`OpenRouter` üzerinden `minimax/minimax-m3` veya Ollama üzerinden
-yerel `llama3.2:3b`) sıfır SDK değişikliğiyle yakalar. Bkz. [`examples/`](examples/):
+Her biri `.env`'de seçtiğin sağlayıcı ve modele karşı **gerçek** bir ajanı (herhangi bir OpenAI-uyumlu
+hosted API veya Ollama üzerinden yerel bir OSS model) sıfır SDK değişikliğiyle yakalar. Bkz. [`examples/`](examples/):
 
 - [`openrouter_agent.py`](examples/openrouter_agent.py) — record · replay · fork (hazır veya `--live` frontier).
 - [`tooluse_agent.py`](examples/tooluse_agent.py) — çok adımlı tool-use ajanı; reasoning + tool izi çevrimdışı yakalanır ve tekrar üretilir.
@@ -167,8 +168,8 @@ edilir ve sadece gerçek concurrent çakışmalar reddedilir.
 `pytest` yeşil; `record → replay → fork → debugger CLI` akışı çevrimdışı ve çapraz araçlarla
 doğrulanabilir.
 
-Dürüst kapsam: kapalı API triage'ı henüz provisional (pilot `minimax-m3`; bağlayıcı Claude ölçümü
-beklemede). Yerel bitwise katman *canonical*-bitwise + imzalıdır; production batching altındaki tam
+Dürüst kapsam: kapalı API triage'ı henüz provisional (tek bir hosted model üzerinde pilot yapıldı;
+bağlayıcı Claude ölçümü beklemede). Yerel bitwise katman *canonical*-bitwise + imzalıdır; production batching altındaki tam
 **raw-byte** batch-invariance GPU/vLLM katmanıdır. Streaming destekleniyor; gateway/Bedrock ve
 MCP-over-stdio interceptor'ları fast-follow. Koddaki `# TODO(phase-N)` işaretleri teknik plana
 bağlanır.
