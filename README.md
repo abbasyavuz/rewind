@@ -129,11 +129,15 @@ Ed25519 signature with no trust in us — so a `.rewind` is independently verifi
 ## Examples
 
 Each runs a **real** agent against the provider and model you set in `.env` (any OpenAI-compatible
-hosted API, or a local OSS model via Ollama), captured with zero SDK changes. See [`examples/`](examples/):
+hosted API, or a local OSS model via Ollama), captured with zero SDK changes. **Run `record` first**
+(it needs a key + model); `replay`/`fork` then reproduce *your* recording offline. See [`examples/`](examples/):
 
-- [`openrouter_agent.py`](examples/openrouter_agent.py) — record · replay · fork (canned **or `--live`** frontier).
+- [`openrouter_agent.py`](examples/openrouter_agent.py) — `record` · `replay` · `fork` (canned **or `--live`** frontier).
 - [`tooluse_agent.py`](examples/tooluse_agent.py) — a multi-step tool-use agent; the full reasoning + tool trail is captured and reproduced offline.
 - [`deterministic_oss.py`](examples/deterministic_oss.py) — the bitwise tier: `verify_replay` + reproducible fork.
+
+> The repo's checked-in `runs/support.rewind` is a canned artifact for the **Rust `rewind diff` headline
+> demo** above — it does not match the Python example agents, so run `record` before `replay`/`fork` there.
 
 ## Evidence
 

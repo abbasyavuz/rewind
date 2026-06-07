@@ -132,11 +132,15 @@ bize güvenmeden yeniden türetir; yani `.rewind` bağımsız doğrulanabilir ve
 ## Örnekler
 
 Her biri `.env`'de seçtiğin sağlayıcı ve modele karşı **gerçek** bir ajanı (herhangi bir OpenAI-uyumlu
-hosted API veya Ollama üzerinden yerel bir OSS model) sıfır SDK değişikliğiyle yakalar. Bkz. [`examples/`](examples/):
+hosted API veya Ollama üzerinden yerel bir OSS model) sıfır SDK değişikliğiyle yakalar. **Önce `record`
+çalıştır** (key + model gerekir); `replay`/`fork` sonra *senin* kaydını çevrimdışı tekrar üretir. Bkz. [`examples/`](examples/):
 
-- [`openrouter_agent.py`](examples/openrouter_agent.py) — record · replay · fork (hazır veya `--live` frontier).
+- [`openrouter_agent.py`](examples/openrouter_agent.py) — `record` · `replay` · `fork` (hazır veya `--live` frontier).
 - [`tooluse_agent.py`](examples/tooluse_agent.py) — çok adımlı tool-use ajanı; reasoning + tool izi çevrimdışı yakalanır ve tekrar üretilir.
 - [`deterministic_oss.py`](examples/deterministic_oss.py) — bitwise katman: `verify_replay` + yeniden üretilebilir fork.
+
+> Repodaki hazır `runs/support.rewind`, yukarıdaki **Rust `rewind diff` vitrin demosu** içindir — Python
+> örnek ajanlarıyla eşleşmez, dolayısıyla orada `replay`/`fork`'tan önce `record` çalıştır.
 
 ## Evidence
 

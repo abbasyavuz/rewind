@@ -130,6 +130,9 @@ def cmd_record() -> None:
 
 
 def cmd_replay() -> None:
+    if not (Path(ARTIFACT) / "log.cbor").exists():
+        sys.exit(f"No recording at {ARTIFACT}. Run `python {Path(__file__).name} record` first "
+                 "(needs REWIND_API_KEY + REWIND_MODEL).")
     with rewind.replay(ARTIFACT) as rep:
         answer = run_agent(make_client(False), trace=True)
     print(f"\n  final answer : {answer}")

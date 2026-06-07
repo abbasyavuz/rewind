@@ -20,11 +20,11 @@ Run:
     python examples/openrouter_agent.py fork             # counterfactual, canned frontier (offline)
     python examples/openrouter_agent.py fork --live      # counterfactual, frontier asked LIVE to the model
 
-Inspect with the Rust CLI (offline, no Python):
-    cargo run -q -p rewind-cli -- log  runs/support.rewind
-    cargo run -q -p rewind-cli -- show runs/support.rewind 0
-    cargo run -q -p rewind-cli -- diff runs/support.rewind runs/support-fixed.rewind --verify \
-        --pubkey-a runs/support.rewind/run-key.pub --pubkey-b runs/support-fixed.rewind/run-key.pub
+Inspect your recording with the Rust CLI (offline, no Python):
+    cargo run -q -p rewind-cli -- log  runs/example-run.rewind
+    cargo run -q -p rewind-cli -- show runs/example-run.rewind 0
+    cargo run -q -p rewind-cli -- diff runs/example-run.rewind runs/example-fork.rewind --verify \
+        --pubkey-a runs/example-run.rewind/run-key.pub --pubkey-b runs/example-fork.rewind/run-key.pub
 """
 
 from __future__ import annotations
@@ -59,8 +59,12 @@ API_KEY = _env("REWIND_API_KEY", "OPENROUTER_API_KEY")
 MODEL = _env("REWIND_MODEL", "OPENROUTER_MODEL")  # no default — you pick the model
 BASE_URL = _env("REWIND_BASE_URL", "OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1")
 
-ARTIFACT = str(ROOT / "runs" / "support.rewind")
-FORKED = str(ROOT / "runs" / "support-fixed.rewind")
+# This example records into its OWN paths so it never clobbers the checked-in
+# `runs/support.rewind`, which is the canned artifact for the Rust `rewind diff`
+# headline demo (a different, hand-built scenario). `record` here writes ARTIFACT;
+# `replay`/`fork` then read it back.
+ARTIFACT = str(ROOT / "runs" / "example-run.rewind")
+FORKED = str(ROOT / "runs" / "example-fork.rewind")
 
 TICKET = "Hi — I was charged twice for order #A-2291. Please refund the duplicate charge."
 
@@ -146,6 +150,18 @@ def _with_content(template: dict, content: str) -> bytes:
     return json.dumps(out).encode()
 
 
+def _require_recording() -> None:
+    """replay/fork need a recording made by THIS example's agent. The repo ships a
+    canned `support.rewind` for the Rust `rewind diff` headline demo, but it does not
+    match this agent's live requests — so `replay`/`fork` here need a fresh `record`
+    first. Fail with a clear hint instead of a confusing mid-run ReplayMismatch."""
+    if not (Path(ARTIFACT) / "log.cbor").exists():
+        sys.exit(
+            f"No recording at {ARTIFACT}.\n"
+            f"Run `python {Path(__file__).name} record` first (needs REWIND_API_KEY + REWIND_MODEL)."
+        )
+
+
 def cmd_record() -> None:
     client = live_client()
     Path(ARTIFACT).parent.mkdir(parents=True, exist_ok=True)
@@ -160,6 +176,7 @@ def cmd_record() -> None:
 
 
 def cmd_replay() -> None:
+    _require_recording()
     with rewind.replay(ARTIFACT) as rep:
         category, reply = agent(offline_client())
     print("reproduced OFFLINE (no network, no key):")
@@ -169,6 +186,7 @@ def cmd_replay() -> None:
 
 
 def cmd_fork(live: bool = False) -> None:
+    _require_recording()
     swap_to = os.environ.get("SWAP_CATEGORY", "technical")
     swap_body = _with_content(_completion_template(0), swap_to)
 
