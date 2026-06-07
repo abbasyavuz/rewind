@@ -6,7 +6,11 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 authors.workspace = true
+readme = "../../README.md"
+keywords = ["blake3", "merkle", "ed25519", "content-addressed", "tamper-evident"]
+categories = ["cryptography", "data-structures", "encoding"]
 
 [dependencies]
 blake3.workspace = true

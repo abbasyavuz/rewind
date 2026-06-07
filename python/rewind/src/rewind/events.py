@@ -1,8 +1,8 @@
 """Event schema — the cross-language contract with rewind-core.
 
-These dataclasses mirror the Rust `EventRecord` (see crates/rewind-core/src/log.rs
-and spec/rewind-format-v0.1-DRAFT.md). The canonical encoding lives in Rust; this
-is the Python-side view used during capture before handing bytes to rewind-core.
+These dataclasses mirror the Rust `EventRecord` (see crates/rewind-core/src/log.rs).
+The canonical encoding lives in Rust; this is the Python-side view used during
+capture before handing bytes to rewind-core.
 """
 
 from __future__ import annotations

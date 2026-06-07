@@ -1,6 +1,6 @@
 //! Hybrid Logical Clock.
 //!
-//! IMPORTANT (see docs/rewind-technical-plan.md §1-C, §3.3): the HLC provides a
+//! IMPORTANT: the HLC provides a
 //! canonical **total order + causality tag** for the event log. It does **NOT**
 //! provide deterministic replay-scheduling. Concurrent replay determinism is a
 //! separate, unbuilt mechanism (Spike-2). Do not conflate the two.

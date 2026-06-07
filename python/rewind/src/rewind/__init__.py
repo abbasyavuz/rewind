@@ -19,7 +19,7 @@ Status: v0. Capture, deterministic replay (match by causal boundary id, FAIL LOU
 divergence/ambiguity), counterfactual fork, and the `Deterministic` (bitwise) profile
 are all wired; the signed `.rewind` is produced by rewind-core (PyO3). The only
 deferred piece is an interactive time-travel debugger UI/TUI (v0.5; today the Rust
-`rewind log|show|diff` CLI covers it). See docs/rewind-technical-plan.md.
+`rewind log|show|diff` CLI covers it). See the project README for the roadmap.
 """
 
 from __future__ import annotations

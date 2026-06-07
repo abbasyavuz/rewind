@@ -5,10 +5,10 @@
 //!
 //! This crate is the "names" half of Rewind (the nouns): it knows nothing about
 //! agents, HTTP, or replay. The Python SDK (the verbs: capture/replay/fork) calls
-//! into it across the format contract in `spec/`.
+//! into it across the on-disk `.rewind` format contract.
 //!
-//! Status: v0 scaffolding. The primitives here are real; the end-to-end
-//! capture→replay→fork pipeline is built in Phases 1-2 (see docs/rewind-technical-plan.md).
+//! Status: v0. The primitives here are real and the end-to-end
+//! capture→replay→fork pipeline is wired (see the `python/` SDK and `examples/`).
 
 pub mod attest;
 pub mod cbor;
@@ -136,7 +136,10 @@ mod tests {
         w.finalize(&kp).unwrap();
 
         let report = verify_artifact(&tmp, Some(&kp.verifying_key())).unwrap();
-        assert!(report.redaction_auditable, "redacted+transform must be auditable");
+        assert!(
+            report.redaction_auditable,
+            "redacted+transform must be auditable"
+        );
         assert!(report.ok());
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -172,25 +175,24 @@ mod tests {
 
         let report = verify_artifact(&tmp, Some(&kp.verifying_key())).unwrap();
         assert_eq!(report.event_count, 50);
-        assert!(report.chain_ok && report.merkle_ok, "seq/chain invariant must hold");
+        assert!(
+            report.chain_ok && report.merkle_ok,
+            "seq/chain invariant must hold"
+        );
         assert!(report.ok());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
-}
 
     /// Test if ciborium encoding is deterministic with the same struct serialized twice.
     #[test]
     fn cbor_determinism_test() {
-        use std::collections::BTreeMap;
-        use crate::manifest::{Manifest, Profile};
-        use crate::cid::Cid;
         use crate::hlc::Hlc;
-        
+
         let mut determinism = BTreeMap::new();
         determinism.insert("key_z".to_string(), "value_z".to_string());
         determinism.insert("key_a".to_string(), "value_a".to_string());
-        
+
         let manifest1 = Manifest {
             format_version: "0.1-DRAFT".to_string(),
             profile: Profile::RecordOnly,
@@ -202,19 +204,19 @@ mod tests {
             merkle_root: Cid::ZERO,
             determinism: Some(determinism.clone()),
         };
-        
+
         // Encode the same manifest twice
         let bytes1 = manifest1.to_cbor().unwrap();
         let bytes2 = manifest1.to_cbor().unwrap();
-        
+
         // Both should be identical
         assert_eq!(bytes1, bytes2, "CBOR encoding should be deterministic");
-        
+
         // Now create a second manifest with the same data but BTreeMap inserted in different order
         let mut determinism2 = BTreeMap::new();
         determinism2.insert("key_a".to_string(), "value_a".to_string());
         determinism2.insert("key_z".to_string(), "value_z".to_string());
-        
+
         let manifest2 = Manifest {
             format_version: "0.1-DRAFT".to_string(),
             profile: Profile::RecordOnly,
@@ -226,9 +228,13 @@ mod tests {
             merkle_root: Cid::ZERO,
             determinism: Some(determinism2),
         };
-        
+
         let bytes3 = manifest2.to_cbor().unwrap();
-        
+
         // Both should be identical because BTreeMap already sorts keys
-        assert_eq!(bytes1, bytes3, "CBOR encoding should be identical regardless of BTreeMap insertion order");
+        assert_eq!(
+            bytes1, bytes3,
+            "CBOR encoding should be identical regardless of BTreeMap insertion order"
+        );
     }
+}

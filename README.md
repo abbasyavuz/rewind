@@ -167,6 +167,22 @@ is pending). The local bitwise tier is *canonical*-bitwise + signed; full **raw-
 under production batching is the GPU/vLLM tier. Streaming is supported; gateway/Bedrock and
 MCP-over-stdio interceptors are fast-follows. `# TODO(phase-N)` markers map to the technical plan.
 
+## Roadmap
+
+- **Phase 0 (current):** ship the signed artifact engine, deterministic replay, counterfactual fork,
+  and the offline Rust debugger CLI as a small, honest v0. This is the code that works today.
+- **Phase 1 (current `# TODO(phase-1)` markers):** tighten correctness and capture coverage without
+  pretending new surfaces are done. The six live markers in the codebase sit here: request
+  canonicalization, moving redaction off the synchronous hot path, actual shims for planned
+  nondeterminism sources (`time` / RNG / `uuid`), and a better semantic diff than today's line-level
+  JSON view.
+- **Phase 2 (after the Phase 1 floor is in):** broaden capture surfaces and production ergonomics:
+  non-`httpx` interceptors (gateway/Bedrock/Vertex/MCP-style boundaries), richer debugger UX, and
+  the GPU/vLLM tier for raw-byte batch-invariance.
+
+The rule is simple: Rewind only claims a boundary or determinism property when the verifier and tests
+already back it up. Everything else stays explicitly phased.
+
 ## Repo layout
 
 ```

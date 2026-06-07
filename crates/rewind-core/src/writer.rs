@@ -1,6 +1,6 @@
 //! Builds a `.rewind` artifact directory on disk.
 //!
-//! v0 on-disk layout (see spec/rewind-format-v0.1-DRAFT.md):
+//! v0 on-disk layout:
 //!   <dir>/manifest.cbor, attestation.cbor, log.cbor, objects/b3-<hex>.bin
 
 use crate::attest::{Attestation, Keypair};
