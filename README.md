@@ -1,5 +1,7 @@
 # Rewind
 
+English | [Türkçe](README.tr.md)
+
 **A flight recorder and time-travel debugger for AI agents.**
 
 When an agent misbehaves in production you usually can't reproduce it — the model is
@@ -182,6 +184,18 @@ MCP-over-stdio interceptors are fast-follows. `# TODO(phase-N)` markers map to t
 
 The rule is simple: Rewind only claims a boundary or determinism property when the verifier and tests
 already back it up. Everything else stays explicitly phased.
+
+## Pre-publish checklist
+
+Before opening the repository publicly, check these once:
+
+- Replace the placeholder GitHub URL (`rewind-dev/rewind`) in the Cargo metadata with the real repo URL.
+- Re-run the local gates: `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test`, and `python -m pytest -q`.
+- Confirm `.env`, `.rewind`, and any local run artifacts stay out of Git history.
+- Verify `SECURITY.md`, issue templates, PR template, and `CODE_OF_CONDUCT.md` match the repo's actual
+  support workflow.
+- Sanity-check the examples and README commands against a clean clone.
 
 ## Repo layout
 
